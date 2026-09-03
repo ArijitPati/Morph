@@ -1,0 +1,62 @@
+voice-guard-ai/
+│
+├── README.md
+├── .env.example
+├── docker-compose.yml
+│
+├── contracts/                                # Layer 3: Blockchain & Smart Contracts
+│   ├── contracts/
+│   │   ├── VoiceRegistry.sol                 # Hashed voice embeddings tied to DIDs
+│   │   ├── DetectionAuditTrail.sol           # Immutable event logging for fraud audits
+│   │   └── TransactionGuard.sol              # Auto-holds high-risk linked transactions
+│   ├── scripts/
+│   │   └── deploy.js                         # Deployment script (e.g., Polygon Amoy testnet)
+│   ├── test/
+│   │   └── audit_trail.test.js
+│   └── hardhat.config.js
+│
+├── ai_engine/                                # Layer 1: Real-Time AI Detection & Spoof Analysis
+│   ├── data/
+│   │   └── sample_audio/                     # Audio clips for testing (real vs. synthetic)
+│   ├── models/
+│   │   ├── spoof_detector.py                 # Wav2Vec2 / RawNet2 / AASIST model wrapper
+│   │   └── speaker_verifier.py               # ECAPA-TDNN (SpeechBrain) for identity matching
+│   ├── features/
+│   │   ├── spectrogram.py                    # Mel-spectrogram, vocoder & phase artifact analysis
+│   │   ├── prosody.py                        # Pitch (F0), jitter, shimmer, & micro-pauses
+│   │   └── explainability.py                 # Heatmap generation for suspicious time-frequency bins
+│   ├── weights/                              # Pretrained/fine-tuned model checkpoints
+│   └── inference_stream.py                   # Sliding-window (2–4s) chunk processing
+│
+├── backend/                                  # Layer 2: Real-Time Prevention & Response Pipeline
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── websocket_call.py             # WebSockets / WebRTC audio stream ingestion
+│   │   │   ├── call_interceptor.py           # Ingestion endpoints for live streams & uploads
+│   │   │   └── audit_logs.py                 # Fetching logged events directly from chain/IPFS
+│   │   ├── core/
+│   │   │   ├── config.py                     # API keys, contract addresses, RPC endpoints
+│   │   │   └── risk_engine.py                # Combines AI spoof confidence + context for risk score
+│   │   ├── blockchain/
+│   │   │   ├── web3_client.py                # Web3.py/Ethers connection to EVM/L2 network
+│   │   │   ├── did_manager.py                # W3C Verifiable Credentials / DID handling
+│   │   │   └── ipfs_client.py                # Off-chain storage of audio hash references
+│   │   └── main.py                           # FastAPI application entry point
+│   ├── requirements.txt
+│   └── Dockerfile
+│
+└── frontend/                                 # Dashboard & Demonstration Client
+    ├── public/
+    ├── src/
+    │   ├── components/
+    │   │   ├── AudioStreamer.jsx             # Live mic recording or audio clip upload component
+    │   │   ├── RiskVerdictBanner.jsx         # Low/Medium/High alert triggers & actions
+    │   │   ├── SpectrogramHeatmap.jsx        # Visual explainability of flagged voice artifacts
+    │   │   └── AuditLogFeed.jsx              # Real-time list of tamper-proof blockchain logs
+    │   ├── hooks/
+    │   │   ├── useWebRTC.js                  # Manages streaming audio chunks to FastAPI
+    │   │   └── useWeb3.js                    # Reads logged fraud events directly from testnet
+    │   ├── App.jsx
+    │   └── index.jsx
+    ├── package.json
+    └── tailwind.config.js

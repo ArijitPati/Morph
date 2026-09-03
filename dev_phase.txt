@@ -1,0 +1,156 @@
+Based on the provided project overview document, here is the detailed file structure and phases of development aligned directly with the three-tier architecture (AI Detection, Prevention Pipeline, and Blockchain Provenance) and the suggested hackathon MVP scope.
+
+---
+
+### Detailed File Structure
+
+```text
+voice-guard-ai/
+│
+├── README.md
+├── .env.example
+├── docker-compose.yml
+│
+├── contracts/                                # Layer 3: Blockchain & Smart Contracts
+│   ├── contracts/
+│   │   ├── VoiceRegistry.sol                 # Hashed voice embeddings tied to DIDs
+│   │   ├── DetectionAuditTrail.sol           # Immutable event logging for fraud audits
+│   │   └── TransactionGuard.sol              # Auto-holds high-risk linked transactions
+│   ├── scripts/
+│   │   └── deploy.js                         # Deployment script (e.g., Polygon Amoy testnet)
+│   ├── test/
+│   │   └── audit_trail.test.js
+│   └── hardhat.config.js
+│
+├── ai_engine/                                # Layer 1: Real-Time AI Detection & Spoof Analysis
+│   ├── data/
+│   │   └── sample_audio/                     # Audio clips for testing (real vs. synthetic)
+│   ├── models/
+│   │   ├── spoof_detector.py                 # Wav2Vec2 / RawNet2 / AASIST model wrapper
+│   │   └── speaker_verifier.py               # ECAPA-TDNN (SpeechBrain) for identity matching
+│   ├── features/
+│   │   ├── spectrogram.py                    # Mel-spectrogram, vocoder & phase artifact analysis
+│   │   ├── prosody.py                        # Pitch (F0), jitter, shimmer, & micro-pauses
+│   │   └── explainability.py                 # Heatmap generation for suspicious time-frequency bins
+│   ├── weights/                              # Pretrained/fine-tuned model checkpoints
+│   └── inference_stream.py                   # Sliding-window (2–4s) chunk processing
+│
+├── backend/                                  # Layer 2: Real-Time Prevention & Response Pipeline
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── websocket_call.py             # WebSockets / WebRTC audio stream ingestion
+│   │   │   ├── call_interceptor.py           # Ingestion endpoints for live streams & uploads
+│   │   │   └── audit_logs.py                 # Fetching logged events directly from chain/IPFS
+│   │   ├── core/
+│   │   │   ├── config.py                     # API keys, contract addresses, RPC endpoints
+│   │   │   └── risk_engine.py                # Combines AI spoof confidence + context for risk score
+│   │   ├── blockchain/
+│   │   │   ├── web3_client.py                # Web3.py/Ethers connection to EVM/L2 network
+│   │   │   ├── did_manager.py                # W3C Verifiable Credentials / DID handling
+│   │   │   └── ipfs_client.py                # Off-chain storage of audio hash references
+│   │   └── main.py                           # FastAPI application entry point
+│   ├── requirements.txt
+│   └── Dockerfile
+│
+└── frontend/                                 # Dashboard & Demonstration Client
+    ├── public/
+    ├── src/
+    │   ├── components/
+    │   │   ├── AudioStreamer.jsx             # Live mic recording or audio clip upload component
+    │   │   ├── RiskVerdictBanner.jsx         # Low/Medium/High alert triggers & actions
+    │   │   ├── SpectrogramHeatmap.jsx        # Visual explainability of flagged voice artifacts
+    │   │   └── AuditLogFeed.jsx              # Real-time list of tamper-proof blockchain logs
+    │   ├── hooks/
+    │   │   ├── useWebRTC.js                  # Manages streaming audio chunks to FastAPI
+    │   │   └── useWeb3.js                    # Reads logged fraud events directly from testnet
+    │   ├── App.jsx
+    │   └── index.jsx
+    ├── package.json
+    └── tailwind.config.js
+
+```
+
+---
+
+### Phases of Development
+
+**Phase 1: Environment Setup & Smart Contract Foundation (Layer 3)**
+
+* Initialize the Hardhat/Foundry project using Polygon testnet (or chosen EVM/L2 network).
+
+
+* Implement `DetectionAuditTrail.sol` to record detection events, cryptographic audio hashes, caller identities, spoof probabilities, and timestamps.
+
+
+* Set up `VoiceRegistry.sol` to store hashed voice embeddings mapped to Decentralized Identifiers (DIDs) without exposing raw biometric data.
+
+
+* Deploy contracts to the testnet, verify deployment, and integrate `IPFS` helpers for off-chain hash referencing.
+
+
+
+**Phase 2: AI Detection & Verification Engine Setup (Layer 1)**
+
+* Set up inference scripts using fine-tuned Wav2Vec2 or RawNet2 for deepfake/spoof probability scoring.
+
+
+* Build the feature extraction pipeline: compute Mel-spectrogram irregularities, pitch contours (F0), prosody micro-pauses, and neural vocoder artifacts.
+
+
+* Integrate a secondary speaker verification check using SpeechBrain (ECAPA-TDNN) to match voice embeddings against enrolled voiceprints.
+
+
+* Build a 2–4 second sliding-window chunk processor (`inference_stream.py`) to prepare for live, sub-second streaming inference.
+
+
+
+**Phase 3: Prevention Pipeline & Risk Engine Integration (Layer 2)**
+
+* Build a FastAPI backend with a WebSocket/WebRTC endpoint to ingest raw audio chunks continuously.
+
+
+* Implement the multi-factor `risk_engine.py`: combine AI spoof confidence with contextual parameters (e.g., mismatch threshold, call metadata).
+
+
+* Create trigger thresholds:
+
+
+* *Low Risk:* Normal processing.
+
+
+* *Medium Risk:* Warning flag and interactive challenge question.
+
+
+* *High Risk:* Call block/flag and transaction auto-freeze signal.
+
+
+
+
+* Wire the backend to automatically dispatch transaction transactions to `DetectionAuditTrail.sol` when an audio chunk is flagged.
+
+
+
+**Phase 4: Dashboard UI & Live Interception Demo (Frontend)**
+
+* Build the React dashboard with live audio streaming/file-upload controls.
+
+
+* Implement real-time risk status indicators displaying the spoof probability score and the corresponding action banner (Low/Medium/High).
+
+
+* Integrate an explainability visualization component rendering Mel-spectrogram heatmaps highlighting anomalous frequency-time bins.
+
+
+* Build the audit log table pulling verified event transactions directly from the deployed smart contract.
+
+
+
+**Phase 5: End-to-End Testing & Hackathon Demo Rehearsal**
+
+* Run end-to-end trials using test sets of authentic voices alongside synthetic samples (ElevenLabs, Tortoise, or RVC).
+
+
+* Ensure streaming latency stays within real-time bounds for short 2–4 second window chunks.
+
+
+* Validate that high-risk flagged calls immediately trigger a confirmed immutable log entry on the blockchain explorer.
