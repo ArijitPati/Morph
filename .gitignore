@@ -1,0 +1,12 @@
+# Environments & Cache
+venv/
+__pycache__/
+*.pyc
+
+# Large Audio Datasets
+data/raw/
+data/interim/
+
+# OS / Editor Files
+.vscode/
+.DS_Store
