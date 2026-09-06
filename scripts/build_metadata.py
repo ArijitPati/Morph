@@ -16,6 +16,7 @@ import csv
 import soundfile as sf
 from pathlib import Path
 from sklearn.model_selection import train_test_split
+from paths import to_relative
 
 # --- CONFIG ---
 ASVSPOOF_MANIFEST = Path("data/metadata/asvspoof2019_la_manifest.csv")
@@ -115,7 +116,7 @@ def build_gary_stafford_rows():
             print(f"[warn] could not read {f}: {e}")
             continue
         raw_rows.append({
-            "audio_path": str(f.resolve()),
+            "audio_path": to_relative(f),
             "source": "gary_stafford",
             "label": "spoof",
             "speaker_id": "",

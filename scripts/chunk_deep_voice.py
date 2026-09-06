@@ -17,6 +17,7 @@ import librosa
 import soundfile as sf
 import numpy as np
 from pathlib import Path
+from paths import to_relative
 
 # --- CONFIG ---
 RAW_ROOT = Path("data/raw/deep_voice")
@@ -78,10 +79,10 @@ def process_file(filepath: Path, label: str, manifest_rows: list):
         sf.write(str(chunk_path), chunk, TARGET_SR)
 
         manifest_rows.append({
-            "parent_file": str(filepath),
+            "parent_file": to_relative(filepath),
             "chunk_index": chunk_index,
             "label": label,
-            "chunk_path": str(chunk_path.resolve()),
+            "chunk_path": to_relative(chunk_path),
             "duration_sec": WINDOW_SEC,
             "sample_rate": TARGET_SR,
         })
@@ -98,10 +99,10 @@ def process_file(filepath: Path, label: str, manifest_rows: list):
             sf.write(str(chunk_path), chunk, TARGET_SR)
 
             manifest_rows.append({
-                "parent_file": str(filepath),
+                "parent_file": to_relative(filepath),
                 "chunk_index": chunk_index,
                 "label": label,
-                "chunk_path": str(chunk_path.resolve()),
+                "chunk_path": to_relative(chunk_path),
                 "duration_sec": len(chunk) / TARGET_SR,
                 "sample_rate": TARGET_SR,
             })

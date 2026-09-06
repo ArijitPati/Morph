@@ -2,6 +2,7 @@ import os
 import csv
 from collections import Counter
 from pathlib import Path
+from paths import to_relative
 
 # Update this path if your extracted root directory is different
 ASVSPOOF_ROOT = Path(r"C:\Users\Akasdip\morph\data\raw\asvspoof2019_la")
@@ -63,7 +64,7 @@ for subset, (audio_dirname, candidate_protocols) in SUBSETS.items():
                 "utterance_id": utt_id,
                 "system_id": system_id,
                 "label": label,
-                "audio_path": str(audio_path.resolve()),
+                "audio_path": to_relative(audio_path),
             })
 
 if not rows:

@@ -13,6 +13,7 @@ import soundfile as sf
 import librosa
 import csv
 from pathlib import Path
+from paths import to_relative
 
 # --- CONFIG ---
 INPUT_DIR = Path("data/raw/gary_stafford/real")
@@ -43,8 +44,8 @@ def main():
             sf.write(str(out_path), audio, TARGET_SR)
 
             manifest_rows.append({
-                "original_file": str(f),
-                "resampled_path": str(out_path.resolve()),
+                "original_file": to_relative(f),
+                "resampled_path": to_relative(out_path),
                 "original_sample_rate": sr,  # note: librosa.load already resampled; see below
                 "target_sample_rate": TARGET_SR,
                 "duration_sec": len(audio) / TARGET_SR,
