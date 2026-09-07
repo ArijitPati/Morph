@@ -1,12 +1,64 @@
-# Environments & Cache
+# =========================
+# Python environments
+# =========================
 venv/
-__pycache__/
-*.pyc
+venv_new/
+.venv/
 
-# Large Audio Datasets
+# Python cache / compiled files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# =========================
+# Environment / secrets
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# Large datasets / temporary data
+# =========================
 data/raw/
 data/interim/
 
-# OS / Editor Files
+# Temporary audio recordings
+*.webm
+*.wav
+*.mp3
+*.m4a
+*.ogg
+*.opus
+*.aac
+*.flac
+
+# =========================
+# Node / Next.js
+# =========================
+node_modules/
+.next/
+out/
+.turbo/
+
+# =========================
+# Build / generated files
+# =========================
+dist/
+build/
+*.log
+
+# =========================
+# IDE / OS
+# =========================
 .vscode/
+.idea/
 .DS_Store
+Thumbs.db
+
+# Generated feature datasets
+data/features/*.parquet

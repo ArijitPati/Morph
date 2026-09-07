@@ -1,0 +1,8 @@
+# Morph Backend — minimal dependencies
+# The ai_engine package (in the project root) provides ML inference.
+# These are the FastAPI server dependencies only.
+
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.34,<1.0
+python-multipart>=0.0.18
+ffmpeg-python>=0.2.0
