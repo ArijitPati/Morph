@@ -1,0 +1,11 @@
+# ai_engine — minimal inference + test dependencies
+# Do NOT install the root requirements.txt in CI; it contains heavy
+# ML/dataset packages (torch, pandas, datasets, …) that are not needed
+# for running inference or the existing test suite.
+
+librosa>=0.10,<2.0
+numpy>=1.24,<3.0
+scipy>=1.10,<2.0
+xgboost>=2.0,<3.0
+soundfile>=0.12,<1.0
+pytest>=7.0,<9.0

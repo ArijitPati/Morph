@@ -1,0 +1,367 @@
+{
+  "full_detection": {
+    "label": 1,
+    "label_str": "FAKE",
+    "confidence": 0.983822762966156,
+    "real_probability": 0.016177237033843994,
+    "fake_probability": 0.983822762966156,
+    "duration": 17.1,
+    "model_version": "v2"
+  },
+  "window_results": [
+    {
+      "window": 1,
+      "start_sec": 0.0,
+      "end_sec": 4.0,
+      "label": "FAKE",
+      "real_prob": 0.035643,
+      "fake_prob": 0.964357
+    },
+    {
+      "window": 2,
+      "start_sec": 4.0,
+      "end_sec": 8.0,
+      "label": "FAKE",
+      "real_prob": 0.017231,
+      "fake_prob": 0.982769
+    },
+    {
+      "window": 3,
+      "start_sec": 8.0,
+      "end_sec": 12.0,
+      "label": "FAKE",
+      "real_prob": 0.041065,
+      "fake_prob": 0.958935
+    },
+    {
+      "window": 4,
+      "start_sec": 12.0,
+      "end_sec": 16.0,
+      "label": "FAKE",
+      "real_prob": 0.035326,
+      "fake_prob": 0.964674
+    },
+    {
+      "window": 5,
+      "start_sec": 16.0,
+      "end_sec": 17.1,
+      "label": "FAKE",
+      "real_prob": 0.266706,
+      "fake_prob": 0.733294,
+      "note": "partial window (1.10s)"
+    }
+  ],
+  "window_stats": {
+    "num_windows": 5,
+    "mean_fake_prob": 0.920806,
+    "max_fake_prob": 0.982769,
+    "min_fake_prob": 0.733294,
+    "std_fake_prob": 0.094101,
+    "mean_real_prob": 0.079194,
+    "pct_fake": 100.0,
+    "pct_real": 0.0,
+    "n_fake": 5,
+    "n_real": 0
+  },
+  "feature_comparison": {
+    "comparison_rows": [
+      {
+        "feature": "mfcc_1_mean",
+        "google_agent_full": -222.015213,
+        "known_real": -179.414322,
+        "known_fake": -250.956696,
+        "google_window_mean": -216.914963,
+        "google_window_std": 23.43795
+      },
+      {
+        "feature": "mfcc_1_std",
+        "google_agent_full": 97.448929,
+        "known_real": 52.604031,
+        "known_fake": 89.013481,
+        "google_window_mean": 93.76078,
+        "google_window_std": 6.053109
+      },
+      {
+        "feature": "mfcc_2_mean",
+        "google_agent_full": 60.361637,
+        "known_real": 115.483673,
+        "known_fake": 79.906998,
+        "google_window_mean": 59.881623,
+        "google_window_std": 10.87077
+      },
+      {
+        "feature": "mfcc_2_std",
+        "google_agent_full": 39.053944,
+        "known_real": 51.681164,
+        "known_fake": 63.177639,
+        "google_window_mean": 37.41127,
+        "google_window_std": 1.686555
+      },
+      {
+        "feature": "mfcc_3_mean",
+        "google_agent_full": -32.955257,
+        "known_real": -8.69478,
+        "known_fake": 7.346313,
+        "google_window_mean": -34.485971,
+        "google_window_std": 9.114507
+      },
+      {
+        "feature": "mfcc_3_std",
+        "google_agent_full": 46.005817,
+        "known_real": 27.316479,
+        "known_fake": 38.315365,
+        "google_window_mean": 44.987744,
+        "google_window_std": 6.692365
+      },
+      {
+        "feature": "mfcc_4_mean",
+        "google_agent_full": 13.649794,
+        "known_real": 25.551117,
+        "known_fake": 1.740296,
+        "google_window_mean": 14.447432,
+        "google_window_std": 4.347638
+      },
+      {
+        "feature": "mfcc_4_std",
+        "google_agent_full": 34.484264,
+        "known_real": 19.512016,
+        "known_fake": 29.451836,
+        "google_window_mean": 32.819395,
+        "google_window_std": 8.665518
+      },
+      {
+        "feature": "mfcc_5_mean",
+        "google_agent_full": 6.297615,
+        "known_real": 9.698299,
+        "known_fake": -15.072011,
+        "google_window_mean": 6.405586,
+        "google_window_std": 5.710817
+      },
+      {
+        "feature": "mfcc_5_std",
+        "google_agent_full": 22.55657,
+        "known_real": 15.115899,
+        "known_fake": 20.50032,
+        "google_window_mean": 20.481731,
+        "google_window_std": 4.783283
+      },
+      {
+        "feature": "cqcc_1_mean",
+        "google_agent_full": -37.592648,
+        "known_real": -29.733242,
+        "known_fake": -42.801846,
+        "google_window_mean": -37.105971,
+        "google_window_std": 1.233175
+      },
+      {
+        "feature": "cqcc_1_std",
+        "google_agent_full": 6.757281,
+        "known_real": 4.16203,
+        "known_fake": 11.250752,
+        "google_window_mean": 6.509095,
+        "google_window_std": 0.486824
+      },
+      {
+        "feature": "cqcc_2_mean",
+        "google_agent_full": 2.893082,
+        "known_real": 5.251382,
+        "known_fake": 2.295489,
+        "google_window_mean": 2.818752,
+        "google_window_std": 1.614793
+      },
+      {
+        "feature": "cqcc_2_std",
+        "google_agent_full": 6.135462,
+        "known_real": 2.241848,
+        "known_fake": 5.579811,
+        "google_window_mean": 6.000351,
+        "google_window_std": 0.852036
+      },
+      {
+        "feature": "cqcc_3_mean",
+        "google_agent_full": -1.799888,
+        "known_real": -7.818453,
+        "known_fake": -7.511263,
+        "google_window_mean": -1.670305,
+        "google_window_std": 0.665197
+      },
+      {
+        "feature": "cqcc_3_std",
+        "google_agent_full": 3.096471,
+        "known_real": 3.053607,
+        "known_fake": 5.119103,
+        "google_window_mean": 3.099615,
+        "google_window_std": 0.22694
+      },
+      {
+        "feature": "spectral_centroid_mean",
+        "google_agent_full": 2266.484063,
+        "known_real": 1571.868099,
+        "known_fake": 2109.521994,
+        "google_window_mean": 2268.436933,
+        "google_window_std": 301.429901
+      },
+      {
+        "feature": "spectral_centroid_std",
+        "google_agent_full": 887.416214,
+        "known_real": 967.931188,
+        "known_fake": 1395.564714,
+        "google_window_mean": 804.159287,
+        "google_window_std": 207.220506
+      },
+      {
+        "feature": "spectral_bandwidth_mean",
+        "google_agent_full": 1660.763036,
+        "known_real": 1500.54107,
+        "known_fake": 1726.397548,
+        "google_window_mean": 1657.084167,
+        "google_window_std": 71.455292
+      },
+      {
+        "feature": "spectral_bandwidth_std",
+        "google_agent_full": 421.566102,
+        "known_real": 400.909633,
+        "known_fake": 578.143988,
+        "google_window_mean": 406.389349,
+        "google_window_std": 65.651142
+      },
+      {
+        "feature": "spectral_rolloff_mean",
+        "google_agent_full": 3763.127921,
+        "known_real": 2894.548767,
+        "known_fake": 3747.225467,
+        "google_window_mean": 3751.162574,
+        "google_window_std": 260.70948
+      },
+      {
+        "feature": "spectral_rolloff_std",
+        "google_agent_full": 1377.017123,
+        "known_real": 1578.612252,
+        "known_fake": 2218.968582,
+        "google_window_mean": 1321.340504,
+        "google_window_std": 230.299329
+      },
+      {
+        "feature": "spectral_contrast_1_mean",
+        "google_agent_full": 18.530771,
+        "known_real": 22.209068,
+        "known_fake": 25.927285,
+        "google_window_mean": 18.491039,
+        "google_window_std": 0.548219
+      },
+      {
+        "feature": "spectral_contrast_1_std",
+        "google_agent_full": 4.410841,
+        "known_real": 4.671922,
+        "known_fake": 7.195919,
+        "google_window_mean": 4.465853,
+        "google_window_std": 0.152153
+      },
+      {
+        "feature": "spectral_contrast_2_mean",
+        "google_agent_full": 15.071164,
+        "known_real": 12.534504,
+        "known_fake": 17.748985,
+        "google_window_mean": 14.893081,
+        "google_window_std": 0.503248
+      },
+      {
+        "feature": "spectral_contrast_2_std",
+        "google_agent_full": 3.534125,
+        "known_real": 3.163831,
+        "known_fake": 6.755629,
+        "google_window_mean": 3.43912,
+        "google_window_std": 0.115806
+      },
+      {
+        "feature": "spectral_contrast_3_mean",
+        "google_agent_full": 17.213909,
+        "known_real": 17.076984,
+        "known_fake": 18.950263,
+        "google_window_mean": 17.228052,
+        "google_window_std": 0.89611
+      },
+      {
+        "feature": "spectral_contrast_3_std",
+        "google_agent_full": 4.200839,
+        "known_real": 3.772281,
+        "known_fake": 5.641784,
+        "google_window_mean": 4.120784,
+        "google_window_std": 0.349236
+      },
+      {
+        "feature": "f0_mean",
+        "google_agent_full": 751.511058,
+        "known_real": 91.632651,
+        "known_fake": 190.397463,
+        "google_window_mean": 883.415256,
+        "google_window_std": 478.440752
+      },
+      {
+        "feature": "f0_std",
+        "google_agent_full": 508.926042,
+        "known_real": 24.027944,
+        "known_fake": 20.561859,
+        "google_window_mean": 92.391951,
+        "google_window_std": 52.588533
+      },
+      {
+        "feature": "voiced_frame_ratio",
+        "google_agent_full": 0.158879,
+        "known_real": 0.295964,
+        "known_fake": 0.943925,
+        "google_window_mean": 0.150794,
+        "google_window_std": 0.058591
+      },
+      {
+        "feature": "rms_mean",
+        "google_agent_full": 0.062148,
+        "known_real": 0.066158,
+        "known_fake": 0.058075,
+        "google_window_mean": 0.064316,
+        "google_window_std": 0.010235
+      },
+      {
+        "feature": "rms_std",
+        "google_agent_full": 0.052754,
+        "known_real": 0.039724,
+        "known_fake": 0.026522,
+        "google_window_mean": 0.051517,
+        "google_window_std": 0.008639
+      },
+      {
+        "feature": "zcr_mean",
+        "google_agent_full": 0.215629,
+        "known_real": 0.117886,
+        "known_fake": 0.206945,
+        "google_window_mean": 0.21364,
+        "google_window_std": 0.047646
+      },
+      {
+        "feature": "zcr_std",
+        "google_agent_full": 0.116071,
+        "known_real": 0.106863,
+        "known_fake": 0.156076,
+        "google_window_mean": 0.103971,
+        "google_window_std": 0.016376
+      },
+      {
+        "feature": "duration",
+        "google_agent_full": 17.1,
+        "known_real": 7.104,
+        "known_fake": 3.405,
+        "google_window_mean": 4.0,
+        "google_window_std": 0.0
+      }
+    ],
+    "distances": {
+      "google_vs_real": 8.339555,
+      "google_vs_fake": 8.049449,
+      "real_vs_fake": 9.280068
+    },
+    "closer_to": "FAKE"
+  },
+  "causes": [
+    "Recording/preprocessing difference"
+  ]
+}

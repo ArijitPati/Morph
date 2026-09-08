@@ -26,13 +26,15 @@ export function SecuritySection() {
               {Array.from({ length: 80 }, (_, i) => {
                 const x = i * 10;
                 const h = 10 + Math.sin(i * 0.4) * 30 + Math.sin(i * 0.7) * 20;
+                const y = Number((100 - h / 2).toFixed(4));
+                const height = Number(h.toFixed(4));
                 return (
                   <rect
                     key={i}
                     x={x}
-                    y={100 - h / 2}
+                    y={y}
                     width={4}
-                    height={h}
+                    height={height}
                     rx={2}
                     fill="currentColor"
                     className="text-primary"
@@ -64,6 +66,7 @@ export function SecuritySection() {
                 const base = Math.sin(i * 0.25) * 0.4 + 0.5;
                 const noise = Math.sin(i * 0.6) * 0.2;
                 const height = Math.max(0.08, base + noise);
+                const heightPct = Number((height * 100).toFixed(4));
                 return (
                   <motion.div
                     key={i}
@@ -71,11 +74,11 @@ export function SecuritySection() {
                     animate={isInView ? { scaleY: 1 } : {}}
                     transition={{
                       duration: 0.5,
-                      delay: 0.02 * i,
+                      delay: Number((0.02 * i).toFixed(4)),
                       ease: "easeOut",
                     }}
                     className="w-1.5 rounded-full bg-primary/20 origin-bottom"
-                    style={{ height: `${height * 100}%` }}
+                    style={{ height: `${heightPct}%` }}
                   />
                 );
               })}

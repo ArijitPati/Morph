@@ -171,20 +171,41 @@ export default function DetectionPage() {
         setRecordedBlob(blob);
         const url = URL.createObjectURL(blob);
         setRecordedUrl(url);
-        setFilename(`recording-${Date.now()}.webm`);
+        const ts = Date.now();
+        setFilename(`recording-${ts}.webm`);
         setAnalysisStatus("ready");
         stream.getTracks().forEach((t) => t.stop());
 
-        // Decode audio for waveform display
+        // ── Diagnostic: log recording info and trigger download ──
+        const mimeType = mediaRecorder.mimeType || "unknown";
+        const sizeBytes = blob.size;
+        console.log("[MORPH-DIAG] Recording stopped");
+        console.log("[MORPH-DIAG] MIME:", mimeType);
+        console.log("[MORPH-DIAG] Blob size:", sizeBytes, "bytes");
+
+        // Decode audio for waveform display + duration
         const ctx = new AudioContext();
         audioContextRef.current = ctx;
         blob.arrayBuffer().then((buf) => {
           ctx.decodeAudioData(buf).then((decoded) => {
             setAudioBuffer(decoded);
             setDuration(decoded.duration);
-          }).catch(() => {
-            // WebM/Opus may not decode in all browsers — waveform won't show
-            // but analysis still works via backend
+            console.log("[MORPH-DIAG] Duration:", decoded.duration, "s");
+            console.log("[MORPH-DIAG] Sample rate:", decoded.sampleRate, "Hz");
+            console.log("[MORPH-DIAG] Channels:", decoded.numberOfChannels);
+            console.log("[MORPH-DIAG] Samples:", decoded.length);
+
+            // Auto-download the diagnostic file
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `morph-diag-${ts}.webm`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            toast.success(`Diagnostic file saved: morph-diag-${ts}.webm`);
+          }).catch((err) => {
+            console.warn("[MORPH-DIAG] decodeAudioData failed:", err);
+            toast.warning("Waveform unavailable (WebM/Opus decode not supported by this browser).");
           });
         });
       };
