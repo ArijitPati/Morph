@@ -18,8 +18,9 @@ import {
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { PageContainer } from "@/components/layout/PageContainer";
-import type { DetectionResult } from "@/types/detection";
+import type { DetectionResult, WindowedDetectionResult } from "@/types/detection";
 import { upload, ApiError } from "@/services/api";
+import { RiskTimeline } from "@/components/detection/RiskTimeline";
 import { toast } from "sonner";
 
 type AnalysisStatus = "waiting" | "ready" | "analyzing" | "complete" | "error";
@@ -140,10 +141,12 @@ export default function DetectionPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playProgress, setPlayProgress] = useState(0);
 
-  // Analysis
+  // Analysis — W2V2-AASIST active, XGBoost fallback
   const [analysisStatus, setAnalysisStatus] =
     useState<AnalysisStatus>("waiting");
   const [result, setResult] = useState<DetectionResult | null>(null);
+  const [windowedResult, setWindowedResult] = useState<WindowedDetectionResult | null>(null);
+  const [selectedModel, setSelectedModel] = useState<"w2v2_aasist" | "v2_robust">("w2v2_aasist");
 
   // Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -299,7 +302,7 @@ export default function DetectionPage() {
     animFrameRef.current = requestAnimationFrame(tick);
   }, [recordedUrl, isPlaying]);
 
-  // ── Analyze ──────────────────────────────────────────────
+  // ── Analyze (W2V2-AASIST active, XGBoost fallback) ───────
 
   const handleAnalyze = useCallback(async () => {
     const audioFile = recordedBlob
@@ -315,19 +318,30 @@ export default function DetectionPage() {
 
     setAnalysisStatus("analyzing");
     setResult(null);
+    setWindowedResult(null);
 
     try {
+      // Active model for /detection is W2V2-AASIST; fallback is XGBoost V2 Robust
+      const modelQuery = `model=${selectedModel}`;
       const formData = new FormData();
       formData.append("file", audioFile);
-
-      const res = await upload<DetectionResult>(
-        "/api/detection/analyze",
-        formData,
-      );
-
+      const res = await upload<DetectionResult>(`/api/detection/analyze?${modelQuery}`, formData);
       setResult(res);
       setAnalysisStatus("complete");
-      toast.success(`Analysis complete — ${res.verdict}`);
+      toast.success(`Analysis complete — ${res.verdict} (${res.model_version})`);
+
+      // Windowed (same model)
+      try {
+        const formDataW = new FormData();
+        formDataW.append("file", audioFile);
+        const windowed = await upload<WindowedDetectionResult>(
+          `/api/detection/analyze-windowed?window_sec=4&aggregation=mean&${modelQuery}`,
+          formDataW,
+        );
+        setWindowedResult(windowed);
+      } catch (e) {
+        console.warn("Windowed analysis failed:", e);
+      }
     } catch (err) {
       setAnalysisStatus("error");
       if (err instanceof ApiError) {
@@ -336,7 +350,7 @@ export default function DetectionPage() {
         toast.error("Could not reach the detection backend.");
       }
     }
-  }, [recordedBlob, selectedFile, filename]);
+  }, [recordedBlob, selectedFile, filename, selectedModel]);
 
   // ── Cleanup ──────────────────────────────────────────────
 
@@ -349,6 +363,7 @@ export default function DetectionPage() {
     setDuration(null);
     setAnalysisStatus("waiting");
     setResult(null);
+    setWindowedResult(null);
     setIsPlaying(false);
     setPlayProgress(0);
     cancelAnimationFrame(animFrameRef.current);
@@ -501,7 +516,7 @@ export default function DetectionPage() {
             )}
           </motion.div>
 
-          {/* Analysis Section */}
+          {/* Analysis Section — W2V2-AASIST active */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -510,15 +525,26 @@ export default function DetectionPage() {
           >
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-semibold">Analysis</h2>
-              {canAnalyze && (
-                <button
-                  onClick={handleAnalyze}
-                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value as "w2v2_aasist" | "v2_robust")}
+                  className="rounded-md border border-border bg-background px-2 py-1.5 text-xs font-medium"
+                  aria-label="Select detection model"
                 >
-                  <Shield className="h-3.5 w-3.5" />
-                  Run Detection
-                </button>
-              )}
+                  <option value="w2v2_aasist">W2V2-AASIST (active)</option>
+                  <option value="v2_robust">XGBoost V2 Robust (fallback)</option>
+                </select>
+                {canAnalyze && (
+                  <button
+                    onClick={handleAnalyze}
+                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                  >
+                    <Shield className="h-3.5 w-3.5" />
+                    Run Detection
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
@@ -526,13 +552,23 @@ export default function DetectionPage() {
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
                   Model
                 </p>
-                <p className="text-sm font-medium mt-0.5">Morph V2</p>
+                <p className="text-sm font-medium mt-0.5">
+                  {selectedModel === "w2v2_aasist" ? "W2V2-AASIST" : "XGBoost V2 Robust"}
+                </p>
+                <p className="text-[10px] text-muted-foreground/60">
+                  {selectedModel === "w2v2_aasist" ? "XLS-R 300M + AASIST · 64.6k samples" : "132 acoustic features"}
+                </p>
               </div>
               <div className="rounded-lg bg-background/50 px-4 py-3">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                  Features
+                  Input
                 </p>
-                <p className="text-sm font-medium mt-0.5">132</p>
+                <p className="text-sm font-medium mt-0.5">
+                  {selectedModel === "w2v2_aasist" ? "64,600 samples" : "132"}
+                </p>
+                <p className="text-[10px] text-muted-foreground/60">
+                  {selectedModel === "w2v2_aasist" ? "mono 16kHz · P(fake) via softmax" : "MFCC/CQCC/..."}
+                </p>
               </div>
               <div className="rounded-lg bg-background/50 px-4 py-3">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
@@ -549,13 +585,21 @@ export default function DetectionPage() {
               </div>
               <div className="rounded-lg bg-background/50 px-4 py-3">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                  Risk Score
+                  Risk Score — P(fake)
                 </p>
                 <p className="text-sm font-medium mt-0.5">
                   {result ? `${result.risk_score.toFixed(1)}%` : "—"}
                 </p>
+                <p className="text-[10px] text-muted-foreground/60">
+                  {result ? `via ${result.model_version}` : selectedModel === "w2v2_aasist" ? "W2V2-AASIST" : "V2 Robust"}
+                </p>
               </div>
             </div>
+            {selectedModel === "w2v2_aasist" && (
+              <p className="mt-3 text-[11px] text-muted-foreground/70">
+                Active: pretrained W2V2-AASIST (XLS-R 300M + AASIST, LA_model.pth &amp; xlsr2_300m.pt · bona-fide logit → P(fake) via softmax). XGBoost V2 Robust remains selectable.
+              </p>
+            )}
           </motion.div>
 
           {/* Result Card — prepared for backend */}
@@ -644,22 +688,65 @@ export default function DetectionPage() {
             )}
           </motion.div>
 
-          {/* Risk Timeline — empty state */}
+          {/* Risk Timeline — windowed real-time architecture */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.25 }}
             className="rounded-xl border border-border bg-card p-5"
           >
-            <h2 className="text-sm font-semibold mb-3">Risk Timeline</h2>
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-8">
-              <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider">
-                Window-by-window analysis
-              </p>
-              <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                Appears after backend analysis
-              </p>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold">Risk Timeline</h2>
+              {windowedResult && (
+                <span className="text-[10px] font-medium uppercase tracking-wider">
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      windowedResult.aggregation.risk_level === "HIGH"
+                        ? "bg-danger/10 text-danger border border-danger/20"
+                        : windowedResult.aggregation.risk_level === "MEDIUM"
+                          ? "bg-warning/10 text-warning border border-warning/20"
+                          : "bg-primary/10 text-primary border border-primary/20"
+                    }`}
+                  >
+                    {windowedResult.aggregation.risk_level} · {windowedResult.aggregation.risk_score}%
+                  </span>
+                </span>
+              )}
             </div>
+
+            {!windowedResult ? (
+              <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-8">
+                <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider">
+                  Window-by-window analysis
+                </p>
+                <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+                  {analysisStatus === "analyzing" ? "Running windowed analysis…" : "Appears after backend analysis (4 s windows)"}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <RiskTimeline windows={windowedResult.windows} />
+                <div className="grid gap-2 sm:grid-cols-3 text-xs">
+                  <div className="rounded-lg bg-background/50 px-3 py-2">
+                    <p className="text-[10px] text-muted-foreground uppercase">Mean P(FAKE)</p>
+                    <p className="text-sm font-semibold">{(windowedResult.aggregation.mean_fake_prob * 100).toFixed(1)}%</p>
+                  </div>
+                  <div className="rounded-lg bg-background/50 px-3 py-2">
+                    <p className="text-[10px] text-muted-foreground uppercase">Max P(FAKE)</p>
+                    <p className="text-sm font-semibold">{(windowedResult.aggregation.max_fake_prob * 100).toFixed(1)}%</p>
+                  </div>
+                  <div className="rounded-lg bg-background/50 px-3 py-2">
+                    <p className="text-[10px] text-muted-foreground uppercase">Windows FAKE</p>
+                    <p className="text-sm font-semibold">
+                      {windowedResult.aggregation.n_fake}/{windowedResult.aggregation.total_windows} ({windowedResult.aggregation.pct_fake}%)
+                    </p>
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground/60">
+                  {windowedResult.windows.length} × {windowedResult.window_sec}s windows (hop {windowedResult.hop_sec}s) · Aggregated verdict: {windowedResult.verdict} · Model {windowedResult.model_version}
+                </p>
+              </div>
+            )}
           </motion.div>
         </div>
       </PageContainer>

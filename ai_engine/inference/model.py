@@ -34,6 +34,10 @@ _MODEL_FILES = {
         "model": "morph_xgboost_v2.json",
         "features": "morph_xgboost_v2_features.json",
     },
+    "v2_robust": {
+        "model": "morph_xgboost_v2_robust.json",
+        "features": "morph_xgboost_v2_robust_features.json",
+    },
 }
 
 # ---------------------------------------------------------------------------

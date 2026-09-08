@@ -63,3 +63,23 @@ Thumbs.db
 
 # Generated feature datasets
 data/features/*.parquet
+
+# =========================
+# Local diagnostics / experiments
+# =========================
+_diag_tmp/
+_hf_tmp/
+_hf_full/
+
+# =========================
+# Model caches
+# =========================
+.cache/
+.huggingface/
+
+# =========================
+# Large model checkpoints
+# =========================
+*.pth
+*.pt
+*.ckpt

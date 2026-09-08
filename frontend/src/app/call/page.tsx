@@ -18,6 +18,8 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { useWebRTC } from "@/hooks/useWebRTC";
+import { useLiveDetection } from "@/hooks/useLiveDetection";
+import { RiskTimeline } from "@/components/detection/RiskTimeline";
 import { toast } from "sonner";
 
 type CallStatus =
@@ -166,10 +168,13 @@ function ParticipantCard({ label, isMuted, isActive }: ParticipantCardProps) {
 
 interface MonitoringPanelProps {
   status: CallStatus;
+  windows: import("@/types/detection").WindowResult[];
+  aggregation: import("@/types/detection").AggregationResult | null;
+  isStreaming: boolean;
 }
 
-function MonitoringPanel({ status }: MonitoringPanelProps) {
-  const monitoringActive = status === "connected" || status === "monitoring";
+function MonitoringPanel({ status, windows, aggregation, isStreaming }: MonitoringPanelProps) {
+  const monitoringActive = status === "connected" || status === "monitoring" || isStreaming;
 
   return (
     <div className="rounded-xl border border-border bg-card p-5">
@@ -194,20 +199,55 @@ function MonitoringPanel({ status }: MonitoringPanelProps) {
         {/* Risk Score */}
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground">Risk Score</span>
-          <span className="text-xs font-medium text-muted-foreground/50">
-            —
-          </span>
+          {aggregation ? (
+            <span
+              className={`text-xs font-bold ${
+                aggregation.risk_level === "HIGH"
+                  ? "text-danger"
+                  : aggregation.risk_level === "MEDIUM"
+                    ? "text-warning"
+                    : "text-primary"
+              }`}
+            >
+              {aggregation.risk_score}% · {aggregation.risk_level}
+            </span>
+          ) : (
+            <span className="text-xs font-medium text-muted-foreground/50">—</span>
+          )}
         </div>
 
-        {/* Timeline placeholder */}
-        <div className="rounded-lg border border-dashed border-border bg-background/30 py-6 text-center">
-          <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider">
-            Detection timeline
+        {aggregation && (
+          <div className="grid grid-cols-2 gap-2 text-[11px]">
+            <div className="rounded bg-background/50 px-2 py-1.5">
+              <p className="text-[10px] text-muted-foreground">Mean</p>
+              <p className="font-semibold">{(aggregation.mean_fake_prob * 100).toFixed(1)}%</p>
+            </div>
+            <div className="rounded bg-background/50 px-2 py-1.5">
+              <p className="text-[10px] text-muted-foreground">Max</p>
+              <p className="font-semibold">{(aggregation.max_fake_prob * 100).toFixed(1)}%</p>
+            </div>
+          </div>
+        )}
+
+        {/* Timeline */}
+        {windows.length > 0 ? (
+          <RiskTimeline windows={windows} />
+        ) : (
+          <div className="rounded-lg border border-dashed border-border bg-background/30 py-6 text-center">
+            <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider">
+              Detection timeline
+            </p>
+            <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+              {monitoringActive ? "Listening… 4 s windows" : "Appears during active monitoring"}
+            </p>
+          </div>
+        )}
+
+        {windows.length > 0 && aggregation && (
+          <p className="text-[10px] text-muted-foreground/60">
+            {aggregation.n_fake}/{aggregation.total_windows} windows FAKE · {windows.length} × 4 s windows
           </p>
-          <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-            Appears during active monitoring
-          </p>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -218,6 +258,7 @@ function MonitoringPanel({ status }: MonitoringPanelProps) {
 export default function CallPage() {
   const [callStatus, setCallStatus] = useState<CallStatus>("idle");
   const [alertOpen, setAlertOpen] = useState(false);
+  const [alertScore, setAlertScore] = useState<number | null>(null);
 
   const {
     localStream,
@@ -228,29 +269,46 @@ export default function CallPage() {
     toggleMute,
   } = useWebRTC();
 
+  const live = useLiveDetection({
+    windowSec: 4.0,
+    aggregation: "mean",
+    onAggregation: (agg) => {
+      if (agg.risk_level === "HIGH" && agg.risk_score >= 65) {
+        setAlertScore(agg.risk_score);
+        setAlertOpen(true);
+      }
+    },
+  });
+
   const handleStartCall = useCallback(async () => {
     try {
       setCallStatus("requesting");
       await start();
       setCallStatus("connecting");
 
-      // Signaling will connect to the real backend later.
-      // For now, we stop at "connecting" — no fake "connected" state.
-      toast.info(
-        "Microphone access granted. Backend signaling not yet connected.",
-      );
+      // Start real-time streaming (Morph windowed inference)
+      try {
+        await live.startStreaming();
+        setCallStatus("monitoring");
+        toast.success("Live monitoring active — 4 s windows");
+      } catch {
+        toast.info("Microphone access granted. Live detection failed to connect.");
+        setCallStatus("connected");
+      }
     } catch {
       setCallStatus("error");
       toast.error("Could not access microphone.");
     }
-  }, [start]);
+  }, [start, live]);
 
   const handleEndCall = useCallback(() => {
+    live.stopStreaming();
     stop();
     setCallStatus("ended");
     setAlertOpen(false);
+    setAlertScore(null);
     toast.info("Call ended.");
-  }, [stop]);
+  }, [stop, live]);
 
   const handleToggleMute = useCallback(() => {
     toggleMute();
@@ -366,17 +424,22 @@ export default function CallPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.2 }}
             >
-              <MonitoringPanel status={callStatus} />
+              <MonitoringPanel
+                status={callStatus}
+                windows={live.windows}
+                aggregation={live.aggregation}
+                isStreaming={live.isStreaming}
+              />
             </motion.div>
           </div>
         </div>
       </PageContainer>
       <Footer />
 
-      {/* Alert Modal — prepared for future backend detection */}
+      {/* Alert Modal — real-time high-risk trigger */}
       <AlertModal
         open={alertOpen}
-        riskScore={null}
+        riskScore={alertScore ?? live.aggregation?.risk_score ?? null}
         onEndCall={handleEndCall}
         onContinue={() => setAlertOpen(false)}
       />

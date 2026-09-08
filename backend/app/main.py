@@ -32,6 +32,7 @@ from app.config import (
     SUPPORTED_AUDIO_EXTENSIONS,
 )
 from app.routes.detection import router as detection_router
+from app.routes.realtime import router as realtime_router
 from app.schemas import HealthResponse
 
 # ---------------------------------------------------------------------------
@@ -69,6 +70,16 @@ async def lifespan(app: FastAPI):
     except Exception:
         log.exception("Failed to load model")
         _model = None
+    # Warm up W2V2-AASIST singleton once (1.2GB checkpoint) — avoid per-request reloads.
+    # Done eagerly so logs show single load; fallback to lazy-load on first request if it fails.
+    try:
+        from ai_engine.inference.w2v2_aasist import get_w2v2_aasist
+
+        log.info("Loading W2V2-AASIST model …")
+        get_w2v2_aasist()
+        log.info("W2V2-AASIST model ready (cached)")
+    except Exception:
+        log.exception("Failed to preload W2V2-AASIST — will lazy-load on first request")
     yield
     log.info("Shutting down.")
 
@@ -97,16 +108,18 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 
 app.include_router(detection_router)
+app.include_router(realtime_router)
 
 
 @app.get("/api/health", response_model=HealthResponse, tags=["health"])
 async def health():
     """Health check — reports backend and AI engine status."""
     model_status = "loaded" if _model is not None else "not loaded"
+    model_label = "V2 Robust" if DEFAULT_MODEL_VERSION == "v2_robust" else DEFAULT_MODEL_VERSION.upper()
     return HealthResponse(
         status="ok",
         engine=model_status,
-        model_version=DEFAULT_MODEL_VERSION,
+        model_version=model_label,
         feature_count=_model.feature_count if _model else 0,
     )
 

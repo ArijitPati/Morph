@@ -16,4 +16,4 @@ MAX_UPLOAD_SIZE_MB = 50
 SUPPORTED_AUDIO_EXTENSIONS = {".wav", ".flac", ".webm", ".ogg", ".mp3"}
 
 # Model
-DEFAULT_MODEL_VERSION = "v2"
+DEFAULT_MODEL_VERSION = "v2_robust"
