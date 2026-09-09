@@ -30,6 +30,12 @@ export function useDetectionSocket({
     useState<DetectionResultMessage["payload"] | null>(null);
 
   const wsRef = useRef<MorphWebSocket | null>(null);
+  const isConnectedRef = useRef(false);
+  const urlRef = useRef(url);
+  // Keep urlRef in sync without recreating connect unnecessarily (avoids hydration churn)
+  useEffect(() => {
+    urlRef.current = url;
+  }, [url]);
 
   const handleMessage = useCallback(
     (message: WSMessage) => {
@@ -59,26 +65,29 @@ export function useDetectionSocket({
 
   const connect = useCallback(() => {
     if (wsRef.current) return;
+    if (!urlRef.current) return; // url not yet resolved on client (hydration guard)
 
-    const ws = new MorphWebSocket({ url });
+    const ws = new MorphWebSocket({ url: urlRef.current });
     ws.onMessage(handleMessage);
     ws.onStatusChange((status) => {
+      isConnectedRef.current = status === "connected";
       setIsConnected(status === "connected");
     });
     ws.connect();
     wsRef.current = ws;
-  }, [url, handleMessage]);
+  }, [handleMessage]);
 
   const disconnect = useCallback(() => {
     wsRef.current?.disconnect();
     wsRef.current = null;
+    isConnectedRef.current = false;
     setIsConnected(false);
     setIsAnalyzing(false);
   }, []);
 
   const sendAudioChunk = useCallback(
     (chunk: ArrayBuffer, sampleRate: number) => {
-      if (!wsRef.current || !isConnected) return;
+      if (!wsRef.current || !isConnectedRef.current) return;
 
       setIsAnalyzing(true);
 
@@ -99,7 +108,7 @@ export function useDetectionSocket({
         },
       });
     },
-    [isConnected],
+    [],
   );
 
   useEffect(() => {

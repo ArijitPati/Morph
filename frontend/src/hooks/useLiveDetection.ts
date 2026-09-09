@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WindowResult, AggregationResult } from "@/types/detection";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8010";
 const WS_BASE = API_BASE.replace(/^http/, "ws");
 
 export interface UseLiveDetectionOptions {
@@ -139,13 +139,13 @@ export function useLiveDetection(options: UseLiveDetectionOptions = {}): UseLive
     });
     audioContextRef.current = ctx;
 
-    // Some browsers ignore sampleRate hint — warn if mismatch
+    // Some browsers ignore sampleRate hint — info only (server resamples)
     if (ctx.sampleRate !== 16000) {
-      console.warn(`[live-detect] AudioContext sampleRate ${ctx.sampleRate} != 16000, will resample on server`);
+      console.info(`[live-detect] AudioContext sampleRate ${ctx.sampleRate} != 16000, will resample on server`);
     }
 
     const source = ctx.createMediaStreamSource(stream);
-    // ScriptProcessor is deprecated but widely supported; fallback for minimal code
+    // ScriptProcessorNode deprecated but retained for compat (see useWebRTC.ts); one-time browser warning is expected.
     const processor = ctx.createScriptProcessor(4096, 1, 1);
     processorRef.current = processor;
 

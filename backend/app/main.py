@@ -33,6 +33,7 @@ from app.config import (
 )
 from app.routes.detection import router as detection_router
 from app.routes.realtime import router as realtime_router
+from app.routes.signaling import router as signaling_router
 from app.schemas import HealthResponse
 
 # ---------------------------------------------------------------------------
@@ -109,6 +110,7 @@ app.add_middleware(
 
 app.include_router(detection_router)
 app.include_router(realtime_router)
+app.include_router(signaling_router)
 
 
 @app.get("/api/health", response_model=HealthResponse, tags=["health"])
@@ -142,7 +144,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
-        port=8000,
+        port=8010,
         reload=False,
         log_level="info",
     )

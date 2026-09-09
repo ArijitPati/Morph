@@ -8,8 +8,7 @@ import { Logo } from "@/components/common/Logo";
 const navLinks = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/detection", label: "Detection" },
-  { href: "/history", label: "History" },
-  { href: "/settings", label: "Settings" },
+  { href: "/call", label: "Live Call" },
 ];
 
 export function Navbar() {

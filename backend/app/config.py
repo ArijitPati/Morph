@@ -5,11 +5,10 @@ from pathlib import Path
 # Project root (morph/)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
-# CORS origins — Next.js dev server
-CORS_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+# CORS origins — Next.js dev server.
+# Diagnostic LAN mode: allow any origin so a second laptop on the same
+# network can reach the API. tighten before any public/demo deployment.
+CORS_ORIGINS = ["*"]
 
 # Upload limits
 MAX_UPLOAD_SIZE_MB = 50

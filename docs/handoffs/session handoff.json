@@ -1,199 +1,511 @@
 {
-  "handoff_meta": {
-    "purpose": "Standalone context-reconstruction prompt to continue the 'morph' deepfake-audio-detection project in a new session",
-    "project_codename": "morph",
-    "project_domain": "Deepfake / synthetic speech (voice spoofing) detection — data pipeline stage, now fully complete and team-shareable; feature extraction is next",
-    "environment": "VS Code on Windows, Python virtual environment at morph/venv",
-    "session_span": "This session picked up immediately after a prior handoff covering Phase 6 (unified metadata) completion and validation. Covered: README + handoff JSON delivery, then a full digression into making the dataset portable/shareable with teammates, then a second README + handoff JSON delivery reflecting that work",
-    "user_role": "Sole builder of the morph pipeline, now explicitly working toward sharing the pipeline with team members (first time team collaboration has been discussed in this project's history)",
-    "distinct_from_related_project": "The user has a separate, unrelated project (SentinelVoice / SIH26104, a hackathon voice-cloning-detection system with blockchain provenance). morph is NOT that project. Do not import SentinelVoice's tech stack, timeline pressure, or hackathon framing into morph discussions unless the user explicitly connects them."
-  },
-
-  "topic_development_chronological": [
-    {
-      "topic": "Session opened mid-flow, not with a fresh 'starting work' handoff",
-      "development": "Unlike prior sessions, this one continued directly from an in-progress conversation rather than opening with the user's established 'I am starting work' handoff-paste pattern. The prior state (carried in context) was: full 3-source data pipeline complete (ingestion, audit, standardization, unified metadata, validation), all confirmed clean, end-of-session housekeeping checklist given (requirements.txt, git commit, .gitignore, STATUS.md)."
-    },
-    {
-      "topic": "Dev-server question clarified",
-      "development": "User asked whether they could 'deactivate the development server' as a final step. Clarified no development server was ever part of this work (pure standalone Python scripts run to completion, not a running service) and distinguished this from the user's separate SentinelVoice project which does involve such a stack. Only a terminal's active venv, if any, would need closing."
-    },
-    {
-      "topic": "Git-sharing constraint raised by the user",
-      "development": "User independently raised that pushing this to git would bloat the repo with audio files, and asked how to share work with team members instead. Recommended split: track code + small metadata CSVs in git, exclude data/raw and data/interim from git, have teammates either regenerate data via the documented scripts or receive a cloud-storage-shared zip of the processed data."
-    },
-    {
-      "topic": "First README.md and handoff JSON delivered",
-      "development": "User requested a comprehensive README documenting everything done and why, plus a full handoff JSON in the same structural format used in this user's other project context (topic development, relationships/dynamics, explicit/implicit understandings, current state, meta-insights, tone permissions, unresolved elements). Both were generated and delivered as files, covering the pipeline's full history through Phase 6 and validation."
-    },
-    {
-      "topic": "User asked: can I just send my team the zip file directly?",
-      "development": "This reopened the sharing question concretely. The critical issue was identified: master_metadata.csv contains absolute paths, and specifically for ASVspoof, those paths point to wherever the user personally extracted LA/ (e.g. C:\\Users\\Akasdip\\...) — meaning a teammate unzipping to a different location would have every ASVspoof row (121,461 of 130,564 total rows) point to nonexistent files. DEEP-VOICE and gary_stafford's interim outputs would be unaffected since those files physically travel with the zip. Two options were laid out: (A) fix paths to be portable then zip everything, or (B) send code + CSVs only and have teammates regenerate data locally. User chose option A."
-    },
-    {
-      "topic": "Initial make_paths_portable.py written as a one-time fix",
-      "development": "A standalone script was proposed to rewrite master_metadata.csv's audio_path column from absolute to project-root-relative paths, run once immediately before zipping. User clarified their ASVspoof LA/ folder was already located inside the project structure at morph/data/raw/asvspoof2019_la/LA/, meaning no manual file-moving was needed before running this conversion — it would just work as written."
-    },
-    {
-      "topic": "User pushed back: don't want to re-run this manually every time",
-      "development": "User asked whether it would be easier to just permanently write relative paths going forward, given how much iterative work remains ahead. This shifted the solution from 'one-time export step' to 'permanent architectural fix.' A shared helper module was proposed: scripts/paths.py, defining PROJECT_ROOT anchored to the helper file's own location (Path(__file__).resolve().parent.parent) rather than the current working directory — explicitly chosen for robustness against being invoked from different working directories (VS Code run button vs terminal vs a teammate's differently-nested copy). Two functions: to_relative() for writing, resolve_path() for reading. The user was walked through exactly which existing scripts needed to import to_relative() (every script that writes a path into a CSV: organize_asvspoof.py, chunk_deep_voice.py, resample_gary_stafford_real.py, build_metadata.py) versus resolve_path() (every script that reads a path back out to open a file: audit_datasets.py, validate_metadata.py, check_actual_channels.py, and the future extract_features.py)."
-    },
-    {
-      "topic": "User asked whether deferring the retrofit and 'handling it when it comes up' was acceptable",
-      "development": "Answered honestly: deferring would not cause a crash later (Python's pathlib handles absolute paths gracefully even when a relative-path resolver is applied to them), so nothing would break for the user personally — but it would fail silently the next time a zip was shared with teammates, since master_metadata.csv would quietly contain absolute paths again with no error or warning. This reframed the choice as a discipline tradeoff (retrofit once now vs. remember to always re-run a conversion script before every future share) rather than a correctness question, and confirmed that running the one-time conversion before the immediate/current zip was non-negotiable regardless of which path forward was chosen."
-    },
-    {
-      "topic": "User chose the retrofit-in-place approach and requested a file-by-file walkthrough",
-      "development": "User explicitly asked to paste each existing script one at a time and have ONLY the path-writing lines changed — nothing else touched. This was treated as a strict scope constraint for all following script reviews: identify exactly which line(s) write a path, apply to_relative() only there, leave all other logic, comments, and structure completely untouched, and explicitly call out when a script already had the fix applied correctly."
-    },
-    {
-      "topic": "organize_asvspoof.py reviewed — already correct",
-      "development": "User's pasted version already had from paths import to_relative and audio_path: to_relative(audio_path) correctly applied. No changes needed; confirmed as-is, with a note that scripts/paths.py must exist and be importable alongside this file for the import to succeed."
-    },
-    {
-      "topic": "chunk_deep_voice.py reviewed — one missed spot found (first pass)",
-      "development": "chunk_path was correctly wrapped with to_relative() in both the main-window and remainder-handling code blocks, but parent_file was still writing str(filepath) (absolute) in both of those same two blocks. Both instances were identified and the exact corrected lines given, changing parent_file: str(filepath) to parent_file: to_relative(filepath) in both the full-window loop and the remainder-handling block."
-    },
-    {
-      "topic": "resample_gary_stafford_real.py reviewed — same pattern of one missed spot",
-      "development": "resampled_path was correctly wrapped with to_relative(), but original_file was still str(f) (absolute). Fix given: original_file: to_relative(f). Noted as non-functionally-critical (build_metadata.py never reads original_file, only resampled_path) but still worth fixing for provenance/traceability consistency and to avoid leaking the user's local folder structure in that manifest."
-    },
-    {
-      "topic": "build_metadata.py reviewed — needed zero changes",
-      "development": "Every path this script writes is either passed straight through from an already-relative manifest column, or (for gary_stafford's untouched fake class, read via direct folder scan rather than a manifest) already correctly wrapped with to_relative(f). Confirmed that once the three upstream scripts are re-run with their now-fixed code, and build_metadata.py is re-run last, the final master_metadata.csv will be fully relative with no separate cleanup step required — meaning make_paths_portable.py becomes fully redundant going forward."
-    },
-    {
-      "topic": "User confirmed they already had paths.py saved from earlier, and asked to delete make_paths_portable.py",
-      "development": "Confirmed deletion was correct and safe, since no script produces absolute paths anymore. Reiterated the exact re-run order needed before the master_metadata.csv on disk could be trusted as genuinely fixed: organize_asvspoof.py -> chunk_deep_voice.py -> resample_gary_stafford_real.py -> build_metadata.py, followed by a fresh validate_metadata.py run to confirm zero missing paths as the real proof the fix worked end-to-end (not just an assumption)."
-    },
-    {
-      "topic": "User asked to confirm the final zip-and-share plan (no re-running needed by teammates)",
-      "development": "Confirmed yes, conditional on: (1) re-running the four scripts in the correct order first to regenerate a genuinely-relative master_metadata.csv, and (2) re-running validate_metadata.py afterward to prove zero missing paths, rather than assuming success. Once both pass, teammates can unzip the whole morph/ folder anywhere and start working immediately, needing only their own venv + requirements.txt install — no path fixes, no re-running ingestion scripts. Flagged that paths.py's __file__-anchored design specifically supports teammates having a differently-nested folder structure (e.g. Desktop/team/morph/ vs the user's own path)."
-    },
-    {
-      "topic": "User re-pasted chunk_deep_voice.py with the parent_file fix already applied, then hit a runtime error",
-      "development": "User applied the requested fix correctly (verified: both parent_file: to_relative(filepath) instances present and correct). Running the script threw ModuleNotFoundError: No module named 'librosa'. Diagnosed as an environment issue, not a code issue: most likely the venv wasn't activated in the current terminal session (no code changes could have caused a previously-installed package to disappear). Step-by-step fix given: check for (venv) in the prompt, activate via .\\venv\\Scripts\\activate, re-run; if still failing after activation, pip install librosa soundfile numpy; if it fails even then, check for a VS Code/terminal Python interpreter mismatch via pip show librosa or a sys.executable check."
-    },
-    {
-      "topic": "User ran validate_metadata.py after presumably resolving the librosa issue and re-running the pipeline",
-      "development": "Output showed the exact same channel-consistency warnings as a prior session (deep_voice: {'2': 64}, gary_stafford: {'2': 933, '1': 933}, asvspoof2019_la: clean) alongside a fully clean path-existence and duration-backfill result (all 130,564 paths resolved, 121,461 ASVspoof durations filled). This was correctly recognized as the SAME pre-existing false-alarm pattern already diagnosed and resolved earlier in this project's history — audit_report.csv reflects original raw files, not the actual mono-forced interim files master_metadata.csv references, and the path-portability work performed this session has no bearing on actual channel counts. The genuinely new and important result was highlighted instead: 100% of paths resolving successfully, which is the real proof that the relative-path rewrite across all four retrofitted scripts worked correctly end-to-end. User was directed to re-run the previously-written check_actual_channels.py (source+label-grouped, checks actual referenced files) to get the accurate, non-stale verdict, with an expectation of the same clean six-groups-all-mono result as before."
-    },
-    {
-      "topic": "Second README.md and handoff JSON requested",
-      "development": "User requested an updated README and handoff JSON reflecting all work done up to this point, using the same section structure as before (full topic development, relationships/dynamics, explicit/implicit understandings, current state, meta-insights, tone permissions, unresolved elements). Both were regenerated to incorporate the entire path-portability arc: the sharing-constraint discovery, the architectural shift from one-time-script to permanent source-level fix, the file-by-file retrofit process and its two caught-but-easily-missed spots (parent_file, original_file), the deletion of the now-redundant make_paths_portable.py, the librosa environment hiccup and its resolution, and the correct re-diagnosis of the recurring stale-audit-report false alarm."
-    }
-  ],
-
-  "critical_technical_state_snapshot": {
-    "path_portability_architecture": {
-      "helper_module": "scripts/paths.py — defines PROJECT_ROOT via Path(__file__).resolve().parent.parent, plus to_relative(abs_path) and resolve_path(rel_path)",
-      "why_file_anchored_not_cwd_anchored": "Ensures identical behavior regardless of where a script is invoked from (VS Code run button, terminal in any directory, a teammate's differently-nested project copy) — critical for team-sharing use case",
-      "scripts_retrofitted_to_write_relative_paths": [
-        "organize_asvspoof.py — audio_path (was already correct when first shown)",
-        "chunk_deep_voice.py — chunk_path (already correct) AND parent_file (fixed this session, two call sites)",
-        "resample_gary_stafford_real.py — resampled_path (already correct) AND original_file (fixed this session)",
-        "build_metadata.py — required no direct changes; inherits correctness from upstream manifests plus one pre-existing correct to_relative(f) call for gary_stafford's fake class"
-      ],
-      "scripts_that_should_use_resolve_path_when_reading": [
-        "audit_datasets.py (and its ASVspoof-manifest-reading logic)",
-        "validate_metadata.py",
-        "check_actual_channels.py",
-        "extract_features.py (not yet written)"
-      ],
-      "deleted_script": "make_paths_portable.py — a one-time patch script, now fully redundant since all source scripts write relative paths from the start; confirmed safe to delete"
-    },
-    "known_recurring_false_alarm": {
-      "symptom": "validate_metadata.py's channel-consistency check (reading audit_report.csv) repeatedly reports deep_voice and gary_stafford as having stereo/mixed-channel files",
-      "root_cause": "audit_report.csv was built from the ORIGINAL raw files (pre-chunking for deep_voice, pre-resampling for gary_stafford's real class), not the actual mono-forced interim files that master_metadata.csv's audio_path column references. Additionally, the check groups by source only, not source+label, masking that gary_stafford's raw real/fake classes likely just have inherently different channel counts bundled misleadingly into one 'mixed' result.",
-      "resolution": "check_actual_channels.py (checks the real referenced files, grouped by source AND label) is the authoritative check and has confirmed clean (all six source/label groups mono) at least once before; this exact warning pattern recurred again in this session after re-running the pipeline post path-retrofit, and was correctly identified again as the same stale/mismatched-grouping artifact, not a new or real problem",
-      "outstanding_action": "User was directed to re-run check_actual_channels.py after this session's pipeline re-run to get the authoritative confirmation; result not yet reported back as of this handoff"
-    },
-    "environment_note": {
-      "issue": "ModuleNotFoundError: No module named 'librosa' occurred mid-session when re-running chunk_deep_voice.py",
-      "diagnosis": "Environment/activation issue (venv likely not active in that terminal), not a code issue — the script itself was correct",
-      "resolution_given": "Activate venv (.\\venv\\Scripts\\activate), re-run; if still missing, pip install librosa soundfile numpy; if VS Code and terminal disagree, check interpreter selection",
-      "status": "Not explicitly confirmed resolved by the user in this conversation, but the subsequent validate_metadata.py run producing full output implies the pipeline did run successfully afterward"
-    }
-  },
-
-  "established_relationships_and_dynamics": {
-    "user_expertise_level": "Technically literate, comfortable running Python scripts, reading tracebacks, managing venvs, and pasting exact terminal output and exact script contents for review. Increasingly comfortable directing precise, scoped requests (e.g. 'change nothing but the audio paths') rather than open-ended asks — a maturing, more surgical collaboration style compared to earlier in the project.",
-    "user_standards": [
-      "Explicitly values minimal, scoped changes when reviewing existing working code — when asked to fix a specific issue across several scripts, the user wants ONLY that issue touched, with existing correct code left completely alone and explicitly acknowledged as correct rather than silently re-explained or restated.",
-      "Thinks ahead about maintenance burden, not just immediate correctness — explicitly chose the permanent source-level fix over a repeatable manual patch step specifically because of anticipated future iteration volume ('we will have to work a lot').",
-      "Wants honest tradeoff framing even for the 'lazier' option — when asking whether deferring a fix was acceptable, was given a genuine honest answer (yes, it's a valid strategy, here's the specific real risk) rather than being talked out of it or having the risk overstated.",
-      "Independently identifies real project-management constraints (repo bloat from audio files, team-sharing needs) without being prompted — the sharing/portability arc in this session originated entirely from the user's own concern, not a suggestion.",
-      "Continues the established cross-session continuity practice: explicit 'ending work' style requests for updated README + handoff JSON, treating these as recurring milestone deliverables rather than one-off asks."
-    ],
-    "assistant_established_pattern": [
-      "When reviewing user-pasted code against a specific, narrow instruction, checks precisely and only for that instruction's scope — confirms correct spots explicitly by name, flags missed spots explicitly by name and exact line, and does not touch or comment on unrelated code.",
-      "Continues the established pattern of re-diagnosing alarming check results before recommending action — correctly identified the recurring channel-warning as the same known stale-data artifact rather than treating it as a new problem requiring a new fix, twice now across two sessions.",
-      "Frames tradeoffs honestly even when the user is leaning toward the lower-effort option, being explicit about what specifically could go wrong later rather than either rubber-stamping or refusing the lower-effort path.",
-      "Diagnoses environment/tooling errors (ModuleNotFoundError) by first ruling out code-level causes when the code itself is known to be unchanged/correct, and offers a ranked sequence of fixes from most-likely to least-likely cause."
-    ]
-  },
-
-  "explicit_and_implicit_understandings": {
-    "explicit": [
-      "All path-storing columns across every manifest and master_metadata.csv are now standardized to be project-root-relative, not absolute — this is now a permanent architectural property of the pipeline, not a one-time export step.",
-      "scripts/paths.py is a foundational shared dependency going forward — every future script that writes or reads a path should import from it (to_relative for writing, resolve_path for reading) rather than constructing paths manually.",
-      "make_paths_portable.py has been deleted and should not be referenced or recreated — its function is now permanently subsumed by the retrofitted source scripts.",
-      "The correct re-run order to regenerate a genuinely portable master_metadata.csv is: organize_asvspoof.py -> chunk_deep_voice.py -> resample_gary_stafford_real.py -> build_metadata.py, followed by validate_metadata.py (and ideally check_actual_channels.py) to confirm success.",
-      "The channel-consistency warnings from validate_metadata.py (reading audit_report.csv) are a known, recurring false alarm rooted in stale/pre-transformation data and mismatched grouping — check_actual_channels.py is the authoritative source of truth on this question, not validate_metadata.py's channel section.",
-      "The final sharing plan is: zip the entire morph/ project folder once paths are confirmed relative and path-existence is confirmed 100%; teammates unzip anywhere and need only their own venv + requirements.txt install to start working, with zero path-fixing or script re-running required on their end.",
-      "Amplitude/loudness normalization remains explicitly deferred to the feature-extraction stage, per persistent memory established in a prior session.",
-      "DEEP-VOICE evaluation must use per-class metrics and report both chunk-level and file-level results, per persistent memory established in a prior session."
-    ],
-    "implicit": [
-      "The user is now actively preparing to onboard teammates onto this codebase, meaning code quality, documentation clarity, and reproducibility have shifted from 'personal continuity aid' to 'genuine team onboarding material' — this raises the bar for how carefully future scripts, comments, and documentation should be written, since an unfamiliar reader (not just future-self) will now be consuming them.",
-      "The user's preference for scoped, minimal-diff changes during the script review process suggests a broader expectation going forward: when asked to fix a specific thing, resist the urge to also 'improve' unrelated adjacent code unless explicitly asked, even if other minor improvements are visible.",
-      "Given that this session involved catching two non-obvious missed spots (parent_file, original_file) that mirrored an already-fixed sibling column (chunk_path, resampled_path) in the same dictionaries, future path-related script reviews should proactively check ALL path-bearing fields in a given data structure, not just the first or most obvious one, since this exact miss pattern has now occurred twice in immediate succession.",
-      "The librosa ModuleNotFoundError, though resolved without much discussion, suggests the user's terminal/venv workflow may have some friction (multiple terminals, possible interpreter mismatches) — if similar environment errors recur, it's worth checking venv activation state early rather than assuming a code-level cause."
-    ]
-  },
-
-  "current_conversation_state": {
-    "immediately_preceding_exchange": "User requested an updated README.md and a fresh comprehensive handoff JSON, reflecting all work completed since the last such pair of documents — specifically the entire path-portability arc (sharing-constraint discovery, paths.py architecture, four-script retrofit process, make_paths_portable.py deletion, the librosa environment hiccup, and the recurring channel-warning false-alarm re-diagnosis). Both documents were regenerated and delivered as files in this turn.",
-    "last_confirmed_completed_step": "All four path-writing scripts (organize_asvspoof.py, chunk_deep_voice.py, resample_gary_stafford_real.py, build_metadata.py) have been reviewed and are confirmed correct for relative-path writing. validate_metadata.py has been re-run post-fix, confirming 100% of 130,564 paths resolve successfully (the channel-consistency section of that same run repeated the known stale-data false alarm and should be disregarded in favor of check_actual_channels.py).",
-    "step_directed_but_not_yet_confirmed_by_user": "Re-running check_actual_channels.py to get the authoritative (non-stale) channel-consistency verdict, grouped by source and label, checking the actual files referenced in master_metadata.csv. Expected result based on prior identical check: all six source/label groups confirmed mono.",
-    "not_yet_done": [
-      "Final zip creation and actual sharing with teammates has not yet happened — the pipeline is validated and ready, but the zip itself has not been reported as created or sent.",
-      "End-of-session housekeeping from the prior handoff (pip freeze > requirements.txt, git commit, .gitignore confirmation, STATUS.md update) was recommended in an earlier session but has not been explicitly reconfirmed as done in this session, and now additionally needs to account for the new/changed files (paths.py added, make_paths_portable.py deleted, four scripts modified).",
-      "Feature extraction (extract_features.py) has still not been started — remains the clearly-identified next major phase once sharing/portability work is fully wrapped up."
-    ]
-  },
-
-  "meta_level_insights": [
-    "This session represents a shift in project phase framing: prior sessions were entirely about correctness and completeness of the data pipeline itself; this session was almost entirely about OPERATIONALIZING that pipeline for team use (sharing, portability, reproducibility for other people) — a natural and expected transition once a solo-built pipeline reaches completion, and future sessions should recognize this as a legitimate, discrete project phase rather than a detour from 'real' pipeline work.",
-    "The path-portability problem was a genuinely non-obvious risk that only surfaced because the user proactively asked 'can I just send my team the zip file' rather than assuming it would work — this is a continuation of the user's established pattern (seen since early in this project's history) of catching real problems by asking pointed, concrete questions rather than accepting a plan's stated completeness at face value.",
-      "The recurring channel-warning false alarm has now appeared identically across two separate sessions, each time correctly re-diagnosed rather than acted on directly. Given this same audit_report.csv-based check keeps producing the same misleading signal, a natural low-priority future improvement (not yet requested, but worth surfacing if relevant) would be to either fix or retire the channel-check section of validate_metadata.py itself, since check_actual_channels.py has now fully superseded it in accuracy and the stale check does nothing but generate recurring, unnecessary alarm.",
-    "The 'scoped, minimal-diff' review pattern established explicitly in this session (paste a script, fix ONLY the named issue, confirm what's already correct by name) is likely to be the user's preferred mode for any future code-review-style requests in this project, not just for the path-portability fixes specifically — worth defaulting to this mode proactively for similar future asks even without an explicit restatement of the constraint."
-  ],
-
-  "tone_and_approach_permissions": {
-    "directness": "High, and increasingly focused on precision — the user's requests have become more surgical over the course of the project ('change nothing but X'), and responses should match that precision: confirm exactly what's correct, flag exactly what's wrong, avoid restating settled context unnecessarily.",
-    "structure": "Tables and step-by-step breakdowns remain the default for comparative/procedural content; for code-review-style exchanges specifically, the preferred format has become: brief diagnosis, then the exact corrected line(s) only, not a full script reprint unless the user pastes a full script expecting a full corrected version back.",
-    "rigor_expectation": "Continue verifying alarming results against their actual root cause before recommending fixes (demonstrated twice now with the channel-warning false alarm) rather than reflexively treating every warning as something requiring action.",
-    "pacing": "The user is comfortable with multi-step architectural pivots mid-task (one-time script -> permanent source-level fix) when the reasoning is sound — don't hesitate to recommend a more thorough fix if it's genuinely better, even after already delivering a simpler version, as long as the tradeoff is explained honestly.",
-    "brevity_vs_thoroughness": "For code-review-scoped requests, favor brevity and precision over thoroughness — the user explicitly wants minimal touched surface area, not a comprehensive re-explanation of a whole script's logic each time. For planning/strategy questions (the sharing decision, the retrofit-vs-defer tradeoff), the established thorough, reasoned mode still applies.",
-    "no_flattery_no_softening": "Consistent with the whole project's established tone — deliver plain verdicts, including correcting the user's own pasted code precisely and matter-of-factly when a spot is missed, without over-apologizing or hedging on straightforward technical facts."
-  },
-
-  "unresolved_elements": [
-    "check_actual_channels.py has not yet been re-run and confirmed by the user following this session's pipeline re-run and path-portability fixes — this is the one open loop needed to fully close out the 'pipeline validated and ready to share' status.",
-    "The final zip has not yet been created or sent to teammates — portability work is done, but the actual sharing action is still pending.",
-    "End-of-session housekeeping (requirements.txt, git commit, .gitignore, STATUS.md) has not been reconfirmed in this session and now needs to additionally capture the new paths.py file, the deletion of make_paths_portable.py, and the modifications to three existing scripts.",
-    "Feature extraction (extract_features.py) remains completely unstarted — no parameters (n_mfcc, window/hop size, delta-delta inclusion) have been discussed, and the amplitude/loudness normalization decision remains open exactly as flagged in persistent memory.",
-    "Whether the librosa ModuleNotFoundError was fully and permanently resolved (venv activation vs. a genuine missing-package situation) was not explicitly confirmed by the user in follow-up — the subsequent successful validate_metadata.py run implies success, but this wasn't stated directly.",
-    "No decision has been made on model architecture, training framework, or evaluation harness beyond the general Librosa-features-into-an-unspecified-classifier framing noted in this user's broader project memory."
-  ],
-
-  "recommended_next_actions_if_resumed": [
-    "Confirm the result of re-running check_actual_channels.py — if clean (expected), the pipeline can be declared genuinely done and shareable; if not clean, investigate as a real (not stale) issue this time, since that script checks the actual referenced files.",
-    "Once confirmed clean, walk through the actual zip creation and sharing step, and confirm the plan for how teammates will set up their own venv/requirements.txt after unzipping.",
-    "Revisit end-of-session housekeeping explicitly, accounting for the new/changed/deleted files from this session (paths.py added, make_paths_portable.py deleted, three scripts modified) before considering the milestone fully closed.",
-    "Begin extract_features.py as the next major phase: Librosa MFCC + delta-delta, reading via resolve_path() from master_metadata.csv, respecting the split column, with amplitude/loudness normalization as the first concrete open design question to raise proactively.",
-    "When writing extract_features.py, use resolve_path() from scripts/paths.py to open audio files rather than reading the audio_path column directly as a string — this is the first genuinely new script since the portability retrofit and should follow the new convention from the start rather than needing a later fix.",
-    "Do not re-litigate the split strategy, labeling convention, chunking parameters, dataset roles, or the path-portability architecture itself unless feature extraction surfaces a genuine new problem with any of them."
-  ]
+"handoff_type": "standalone_conversation_reconstruction",
+"purpose": "Resume the exact ongoing development/debugging session for the user's Morph real-time deepfake/voice-spoof detection demo without losing technical state, decisions, rationale, or next steps.",
+"project": {
+"name": "morph",
+"domain": "Real-time deepfake/voice-spoof detection integrated into a live browser-to-browser WebRTC call.",
+"goal": "Build a demo where one participant's live audio is captured, transmitted through WebRTC, converted to 16 kHz mono Float32 PCM, streamed to a FastAPI detection WebSocket, passed through a replaceable ML model, and surfaced in the frontend as a continuously updating Risk Score plus a temporally gated fake-audio alert.",
+"stack": {
+"os_and_tools": [
+"Windows",
+"VS Code",
+"PowerShell",
+"Python virtual environment",
+"Git",
+"local coding assistant named opencode"
+],
+"frontend": "Next.js",
+"backend": "FastAPI with Uvicorn",
+"communications": "WebRTC peer-to-peer audio plus WebSocket signaling and WebSocket detection streaming",
+"model": "morph_xgboost_v2",
+"model_features": 132,
+"model_contract": "Strict name-keyed model validation"
+},
+"core_architecture": [
+"Browser microphone",
+"WebRTC",
+"remote MediaStream",
+"AudioContext / ScriptProcessorNode",
+"mono Float32 PCM",
+"16 kHz target",
+"4-second rolling inference window",
+"1-second hop",
+"ML model",
+"fake_probability",
+"temporal decision layer",
+"alert UI"
+],
+"design_principle": "Keep the model replaceable. The retrained teammate model should be swappable into the same frontend/backend streaming architecture without redesigning the call system."
+},
+"user_preferences_and_working_style": {
+"instruction_style": "User strongly prefers exact, copy-pasteable, step-by-step instructions with zero ambiguity.",
+"technical_honesty": "User explicitly wants brutally honest technical assessment rather than optimistic claims.",
+"git_safety": "User is cautious with Git. Never casually recommend destructive commands such as reset, restore, clean, forced checkout/switch, or similar operations. Preserve working state unless explicitly planned.",
+"collaboration": "User frequently relays opencode output and wants the assistant to interpret it and provide the next exact action.",
+"current_tone": "Practical, direct, reassuring when a checkpoint is genuinely verified, but no overclaiming.",
+"follow_up_style": "Prefer one clear next action rather than many speculative changes.",
+"permission": "It is acceptable to inspect code via opencode read-only and to make narrowly scoped changes when explicitly justified. Avoid unrelated refactors."
+},
+"important_model_and_signal_context": {
+"model_name": "morph_xgboost_v2",
+"feature_count": 132,
+"stream_format": "mono Float32 little-endian PCM at exactly 16 kHz",
+"upstream_requirement": "The original detect_from_array path does not resample, so upstream should ideally be 16 kHz.",
+"current_backend_behavior": "Backend tolerates other sample rates by resampling each complete inference window to 16 kHz.",
+"windowing": {
+"window_duration_seconds": 4.0,
+"hop_seconds": 1.0,
+"sample_rate_hz": 16000,
+"samples_per_window": 64000,
+"approximate_prediction_frequency": "About once per second after the first 4-second window fills"
+},
+"frontend_audio_capture": {
+"node": "ScriptProcessorNode",
+"buffer_size_samples": 4096,
+"channels": "Mono",
+"channel_used": 0,
+"chunk_duration_at_16khz_seconds": 0.256,
+"approximate_chunk_size": "About 16 KB of Float32 sample data before Base64 encoding",
+"sample_rate_behavior": "AudioContext attempts 16 kHz when possible; getUserMedia sampleRate=16000 is only a hint",
+"known_warning": "ScriptProcessorNode deprecation warning is expected and not currently a blocker. AudioWorklet migration is deferred."
+},
+"websocket_audio_payload": {
+"type": "audio_chunk",
+"payload": [
+"data: Base64 encoded Float32 PCM",
+"sample_rate: AudioContext sample rate",
+"timestamp"
+],
+"behavior": "Frontend silently drops chunks while detection WebSocket is not open."
+},
+"backend_decode": [
+"Base64 decode",
+"Validate byte length/alignment",
+"Interpret as little-endian float32",
+"Clip samples to [-1, 1]",
+"Validate sample rate against allowlist",
+"Resample whole window to 16 kHz when needed",
+"Call detect_from_array(window, sr=16000, model_version='v2')"
+],
+"backend_result": {
+"message_type": "detection_result",
+"payload_fields": [
+"label",
+"label_str",
+"confidence",
+"real_probability",
+"fake_probability",
+"chunk_duration"
+]
+}
+},
+"known_model_limitations": {
+"live_mic_behavior": {
+"known_issue": "Current live model has a false-positive/calibration problem.",
+"previous_measurement_summary": {
+"real_live_speech_median_fake_probability": 0.63,
+"fake_played_through_speaker_median_fake_probability": 0.76,
+"interpretation": "The distributions overlap heavily and do not provide a clean threshold."
+},
+"environment_issue": "Background PA/environmental noise can drive false positives.",
+"example_observation": "A prior UI screenshot showed Risk Scores around 96% and 92% under noisy conditions.",
+"model_status": "Teammates are retraining the model.",
+"important_separation": "Model/calibration quality is a separate problem from UI alert spam and should not be 'fixed' by arbitrarily changing the temporal UI thresholds."
+},
+"threshold_policy": {
+"current_temporal_thresholds": {
+"ewma_alpha": 0.4,
+"enter_fake_smoothed_probability": 0.82,
+"exit_fake_smoothed_probability": 0.55,
+"raw_fake_streak_threshold": 0.75,
+"required_consecutive_windows": 3
+},
+"status": "Engineering starting points, not scientifically validated thresholds.",
+"do_not_overfit": "Do not tune these aggressively against the currently flawed model. Evaluate the retrained model first on clean genuine speech, noisy genuine speech, synthetic/fake speech, synthetic plus noise, and different devices/speakers, then tune temporal behavior from actual distributions.",
+"teammate_proposal_rejected_as_primary_mechanism": {
+"idea": "80% first alert and 85% repeated alerts every 5 seconds",
+"assessment": "Not validated as a primary detection policy because current model calibration is unreliable.",
+"possible_future_role": "Could become a separate notification policy layered on top of the temporal state machine, but is not the current mechanism."
+}
+}
+},
+"git_and_branch_state": {
+"working_branch": "webrtc-live-demo-work",
+"current_head": "8a99d91 Build Morph AI engine, backend, and frontend",
+"other_relevant_commits": [
+"07d95c5 master/backup-local-work",
+"18295c0 older"
+],
+"critical_history": {
+"live_demo_commit_status": "The working live-demo implementation was not committed to any branch; it was preserved in stash@{0}.",
+"stash": "stash@{0}",
+"stash_description": "On webrtc-live-demo-work: WIP before inspecting EWMA hysteresis",
+"stash_content": "Contains the known-good live WebRTC/signaling/detection implementation plus untracked signaling/LAN files.",
+"stash_temporal_content": "Does not contain the old EWMA/hysteresis implementation. Read-only inspection found no old smoothing implementation in branches or stash content.",
+"restore_method": "git stash apply 'stash@{0}'",
+"stash_status": "Because apply, not pop, was used, stash@{0} remains as a safety backup."
+},
+"post_restore_worktree_summary": {
+"staged_files_count": 3,
+"staged_files": [
+"ai_engine/inference/streaming.py",
+"ai_engine/tests/test_streaming.py",
+"backend/tests/test_detection_ws.py"
+],
+"modified_unstaged_including": [
+"call/page.tsx",
+"useWebRTC.ts",
+"useDetectionSocket.ts",
+"websocket.ts",
+"detection.py",
+"main.py",
+"config.py"
+],
+"untracked_files_including": [
+"backend/app/routes/signaling.py",
+"backend/tests/test_signaling_ws.py",
+"frontend/src/services/signaling.ts",
+"frontend/src/types/signaling.ts",
+"LAN scripts"
+]
+},
+"safety_rules": [
+"Do not commit, stash, reset, restore, clean, checkout, or switch branches unless explicitly planned.",
+"Current working tree is a known-good state and should be preserved.",
+"The stash is a safety copy and should remain untouched unless needed."
+]
+},
+"webrtc_and_signaling_debugging": {
+"initial_problem": "There was confusion around ontrack firing and ICE state in chrome://webrtc-internals, plus a signaling race caused by sending join while the WebSocket was still CONNECTING.",
+"fix": {
+"signaling_send_behavior": "send() was changed to queue messages while the WebSocket is CONNECTING, then flush the queue in onopen.",
+"logging_and_status": "Logging/status/toast information was added."
+},
+"known_good_web_rtc_state": {
+"useWebRTC_behavior": [
+"Creates RTCPeerConnection with iceServers.",
+"Registers ontrack to attach the remote audio stream.",
+"Calls attachDetectionStream(remote, 'remote peer') on remote audio.",
+"Tracks ICE connection state.",
+"Tracks peer connection state.",
+"Handles offer/answer/ICE signaling.",
+"Captures local PCM."
+],
+"two_browser_localhost_test_result": [
+"Signaling connected to ws://localhost:8010/api/signaling/ws.",
+"Join was queued and then flushed.",
+"Detection tap attached to local microphone initially.",
+"Detection tap switched to remote peer when ontrack fired.",
+"Remote audio was reported live.",
+"ICE progressed checking -> connected.",
+"Peer connection progressed connecting -> connected.",
+"Both browser windows showed successful behavior."
+],
+"conclusion": "WebRTC, signaling, ICE, ontrack, remote audio delivery, and detection-tap switching are proven working in the browser-to-browser localhost test.",
+"important_direction": "Do not modify WebRTC connection logic unless a future physical-device test actually exposes a new defect."
+},
+"network_environment_history": {
+"venue_wifi": "A prior venue/college Wi-Fi test exhibited client isolation, preventing devices from communicating directly.",
+"phone_hotspot": "Previously worked for a two-laptop network test.",
+"http_secure_context_note": "Plain HTTP getUserMedia is restricted on non-localhost origins; localhost is permitted. For the LAN demo this may become relevant because microphone access on another laptop can require a secure context or browser exception depending on the exact browser/environment.",
+"home_wifi_current": "Home Wi-Fi currently allows the user's phone to reach the laptop."
+}
+},
+"temporal_detection_implementation": {
+"objective": "Eliminate alert popup spam caused by repeated FAKE model windows while preserving a continuously updated raw Risk Score.",
+"state_machine_file": "frontend/src/lib/temporalDetection.ts",
+"react_binding_file": "frontend/src/hooks/useTemporalDetection.ts",
+"test_file": "frontend/src/lib/temporalDetection.test.ts",
+"implementation": {
+"ewma": {
+"alpha": 0.4,
+"initialization": "First sample initializes the EWMA."
+},
+"entry": {
+"raw_gate": "Require 3 consecutive raw windows where fake_probability > 0.75.",
+"smoothed_gate": "EWMA must reach >= 0.82 to enter FAKE.",
+"transition": "REAL -> FAKE produces enteredFake=true exactly once."
+},
+"exit": {
+"condition": "When smoothed probability falls to <= 0.55, state can exit FAKE and return to REAL.",
+"purpose": "Hysteresis prevents rapid flapping and prevents one low model window from instantly clearing a sustained FAKE state."
+},
+"alert_semantics": "enteredFake is true only on a REAL -> FAKE transition. Sustained FAKE windows do not retrigger the alert.",
+"reset": "End-call resets detector to pristine REAL state.",
+"implementation_style": "Pure dependency-free TemporalDetector state machine plus a thin React hook using a ref to avoid render forking; process/reset callbacks are stable.",
+"timers": "None."
+},
+"tests": {
+"count": 9,
+"status": "9/9 pass",
+"cases": {
+"A": "Single 0.95 sample -> no alert.",
+"B": "0.9 repeated 3 times -> FAKE on third qualifying window.",
+"B2": "Broken raw streak resets the consecutive-window gate.",
+"C": "Sustained high windows -> exactly one enteredFake.",
+"D": "Smoothed value in approximately 0.55-0.82 holds FAKE.",
+"E": "Low stream exits FAKE, with no same-first-window shortcut.",
+"F": "After exit, a new qualifying episode can re-enter FAKE and produce exactly one transition.",
+"G": "No temporal-detector interaction preserves FAKE without repeated alerts.",
+"H": "reset() returns to pristine REAL."
+}
+},
+"page_logic_after_final_correction": {
+"file": "frontend/src/app/call/page.tsx",
+"effective_logic": [
+"setLastResult(result)",
+"setRiskScore(Math.round(result.fake_probability * 100)) on EVERY detection_result",
+"const decision = temporal.process(result.fake_probability)",
+"if (decision.enteredFake) { setAlertOpen(true) }"
+],
+"critical_ui_separation": {
+"risk_score": "Tracks raw fake_probability on every incoming detection_result and therefore can fluctuate every prediction window.",
+"alert": "Controlled only by temporal enteredFake transition.",
+"meaning": "The UI Risk Score is deliberately different from the temporal state."
+},
+"dependency": "[temporal] was already present as part of smoothing wiring; it was not introduced by the final setRiskScore placement correction.",
+"final_correction": "Moved setRiskScore outside the enteredFake conditional so Risk Score returned to the pre-smoothing behavior.",
+"constraints_respected": [
+"No WebRTC changes.",
+"No signaling changes.",
+"No PCM capture changes.",
+"No backend detection changes.",
+"No model inference changes.",
+"No temporal state-machine threshold changes.",
+"No test changes.",
+"No Git destructive operations."
+]
+},
+"behavior_verified_in_browser": [
+"Risk Score updates continuously.",
+"A single isolated high prediction does not immediately alert.",
+"Sustained suspicious predictions cause one alert.",
+"Clicking Continue Call does not cause repeated alerts during sustained FAKE state.",
+"Detector eventually exits FAKE and returns to REAL after sufficiently low evidence.",
+"A later new REAL -> FAKE episode can trigger another alert."
+]
+},
+"validation_status": {
+"completed": [
+"Temporal state machine implemented.",
+"EWMA implemented.",
+"Hysteresis implemented.",
+"Three-window raw gate implemented.",
+"Alert only on REAL -> FAKE transition.",
+"Reset on end call implemented.",
+"9/9 temporal tests pass.",
+"npx tsc --noEmit passes for the whole frontend.",
+"Local two-browser WebRTC/signaling test passes.",
+"Remote ontrack/audio path passes.",
+"Detection tap switches from local mic to remote peer.",
+"Risk Score regression fixed.",
+"Risk Score and temporal alert behavior manually verified.",
+"LAN frontend reachable from phone.",
+"LAN backend reachable from phone.",
+"Frontend WebSocket URL construction inspected and confirmed LAN-aware."
+],
+"not_completed": [
+"A complete physical two-laptop WebRTC test.",
+"Validation on the exact presentation network/college Wi-Fi.",
+"Formal calibration/tuning of temporal thresholds against the retrained model.",
+"Replacement/integration testing with the teammate's retrained model.",
+"Potential remote-stream monitoring indicator, if still desired.",
+"Potential AudioWorklet migration, deferred and non-blocking."
+]
+},
+"lan_network_investigation_current_state": {
+"home_wifi": true,
+"laptop_lan_ipv4": "192.168.100.86",
+"frontend": {
+"port": 3000,
+"binding": "0.0.0.0:3000",
+"status": "LAN-accessible"
+},
+"backend": {
+"port": 8010,
+"old_binding": "127.0.0.1:8010",
+"new_binding": "0.0.0.0:8010",
+"current_start_command": "python -m uvicorn app.main:app --host 0.0.0.0 --port 8010",
+"status": "LAN-accessible"
+},
+"tests_performed": {
+"same_laptop_backend_lan_url": {
+"url": "[http://192.168.100.86:8010](http://192.168.100.86:8010)",
+"result": "{"detail":"Not Found"}",
+"interpretation": "Success for connectivity purposes. FastAPI received the request; root route simply does not exist."
+},
+"same_laptop_frontend_lan_url": {
+"url": "[http://192.168.100.86:3000](http://192.168.100.86:3000)",
+"result": "Morph frontend loaded",
+"interpretation": "Success."
+},
+"phone_to_laptop_frontend": {
+"url": "[http://192.168.100.86:3000](http://192.168.100.86:3000)",
+"result": "Morph frontend loaded",
+"interpretation": "Success. Physical device can reach laptop over home Wi-Fi."
+},
+"phone_to_laptop_backend": {
+"url": "[http://192.168.100.86:8010](http://192.168.100.86:8010)",
+"result": "{"detail":"Not Found"}",
+"interpretation": "Success. Physical device can reach FastAPI over home Wi-Fi."
+}
+},
+"conclusions": [
+"Home Wi-Fi currently permits device-to-device communication.",
+"Windows/network path permits LAN access to the two service ports.",
+"Next.js is exposed properly.",
+"FastAPI is exposed properly.",
+"The home router is not isolating the phone from the laptop.",
+"The system is suitable for a future two-device test on this home Wi-Fi."
+],
+"remaining_network_uncertainty": "A true two-peer WebRTC call between two independent laptops has not yet been tested. The basic LAN path is proven, but the complete physical WebRTC path remains to be verified.",
+"venue_warning": "The earlier venue Wi-Fi had client isolation, so home-Wi-Fi success does not guarantee college/venue Wi-Fi success."
+},
+"frontend_lan_url_logic": {
+"source_file": "frontend/src/services/websocket.ts",
+"function": "getApiBaseUrl()",
+"current_logic_summary": [
+"First checks process.env.NEXT_PUBLIC_API_URL.",
+"If set, uses it after removing a trailing slash.",
+"Otherwise, in the browser, obtains window.location.hostname.",
+"If hostname is not localhost, 127.0.0.1, or [::1], returns http://<hostname>:8010.",
+"Otherwise falls back to http://localhost:8010."
+],
+"signaling": {
+"file": "frontend/src/services/signaling.ts",
+"construction": "${getApiBaseUrl().replace(/^http/, 'ws')}/api/signaling/ws",
+"when_evaluated": "At click time in call/page.tsx.",
+"LAN_result": "When page is loaded from [http://192.168.100.86:3000](http://192.168.100.86:3000), signaling connects to ws://192.168.100.86:8010/api/signaling/ws."
+},
+"detection": {
+"construction": "Same getApiBaseUrl().replace(/^http/, 'ws') pattern with /api/detection/ws.",
+"when_evaluated": "At render in call/page.tsx.",
+"LAN_result": "When page is loaded from [http://192.168.100.86:3000](http://192.168.100.86:3000), detection connects to ws://192.168.100.86:8010/api/detection/ws."
+},
+"env_override": {
+"status": "No frontend .env* file found and NEXT_PUBLIC_API_URL does not appear elsewhere in repository.",
+"consequence": "Hostname-derived branch currently governs."
+},
+"important_conclusion": "A second laptop opening [http://192.168.100.86:3000](http://192.168.100.86:3000) will point both WebSockets back to 192.168.100.86:8010, not to the second laptop itself. No code change is required for this."
+},
+"current_session_end_state": {
+"what_was_decided": "Stop work at the current checkpoint rather than continuing to modify code.",
+"user_question_before_end": "Whether the demo should be turned off and what needs to be saved/committed.",
+"decision": "Yes, stop the demo. Do not commit, stash, reset, or otherwise clean the current state.",
+"safe_shutdown": [
+"Stop the frontend dev server with Ctrl+C.",
+"Stop the backend with Ctrl+C.",
+"No manual file save procedure is needed beyond normal editor saves; code is already on disk."
+],
+"tomorrow_startup": [
+"cd C:\Users\Akasdip\morph",
+"git status",
+"Do not change anything merely based on status; inspect if needed.",
+"Start backend with: python -m uvicorn app.main:app --host 0.0.0.0 --port 8010",
+"Start frontend with: npm run dev"
+],
+"important_tomorrow_rule": "Keep the backend on 0.0.0.0:8010 for LAN testing. Do not revert to 127.0.0.1 before the physical two-device test.",
+"current_stop_point": "The next task is physical two-laptop end-to-end testing when a second laptop becomes available."
+},
+"next_priority": {
+"primary": "Physical two-laptop end-to-end test.",
+"reason": "All software components and LAN prerequisites that can be validated on one machine have already passed. The highest-value remaining uncertainty is actual two-peer behavior between independent devices.",
+"planned_topology": {
+"laptop_a": "Server/development laptop at 192.168.100.86.",
+"laptop_b": "Second laptop on same Wi-Fi.",
+"frontend_url_on_b": "[http://192.168.100.86:3000](http://192.168.100.86:3000)",
+"backend_target_from_b": "ws://192.168.100.86:8010",
+"do_not_use_on_b": "localhost:3000"
+},
+"test_sequence": [
+"Connect both laptops to the same network.",
+"Start FastAPI on Laptop A with host 0.0.0.0 and port 8010.",
+"Start Next.js on Laptop A.",
+"Open [http://192.168.100.86:3000](http://192.168.100.86:3000) on both browsers.",
+"Confirm the room/signaling panel reports the expected LAN signaling URL.",
+"Have one browser host/join the room and the other join.",
+"Verify signaling connects.",
+"Verify WebRTC peer connection becomes connected.",
+"Verify ontrack fires and remote audio becomes live.",
+"Verify detection tap switches to remote audio.",
+"Verify Risk Score updates.",
+"Verify temporal alert behavior under suspicious audio.",
+"Confirm Continue Call does not produce alert spam.",
+"Confirm FAKE -> REAL recovery.",
+"Confirm a second REAL -> FAKE transition can alert again."
+],
+"possible_blocker": "Browser microphone access over plain HTTP on a LAN origin may be restricted because secure-context rules generally apply; this must be tested on the actual second laptop/browser. Do not assume success or failure until tested.",
+"presentation_network_follow_up": "After home-Wi-Fi testing, separately test the exact college/venue network because the earlier venue network exhibited client isolation.",
+"after_two_laptops": "Freeze this pipeline if it works, then focus on demo hardening and teammate model integration rather than unnecessary refactoring."
+},
+"potential_future_work": {
+"model_replacement": "Integrate teammate's retrained model while keeping the current streaming and frontend contract intact.",
+"model_validation": "Compare clean real, noisy real, fake, fake+noise, device variation, and speaker variation.",
+"temporal_tuning": "Tune EWMA/hysteresis/streak thresholds only after retrained model distributions are known.",
+"remote_stream_monitoring": "Potential UI indicator showing that detection is monitoring the remote stream; not yet validated as current top priority.",
+"audio_worklet": "Eventually migrate from deprecated ScriptProcessorNode to AudioWorklet, but this is not demo-critical now.",
+"network_hardening": "Determine reliable strategy for public/college network and microphone secure-context requirements.",
+"git_hygiene": "Once the implementation is considered stable and after reviewing the mixed working tree, create a deliberate commit or commits. Do not improvise a commit now."
+},
+"semantic_model_of_key_concepts": {
+"risk_score_vs_temporal_state": {
+"risk_score": "Raw model-facing UI metric. Changes every detection result based on fake_probability.",
+"temporal_state": "Smoothed decision state used to control alert transitions.",
+"example": {
+"risk_score_sequence": "0.35 -> 0.72 -> 0.91 -> 0.83 -> 0.40",
+"temporal_state_sequence": "REAL -> REAL -> FAKE -> FAKE -> REAL"
+},
+"important_implication": "A high Risk Score does not necessarily mean the popup should immediately appear; the temporal layer intentionally filters alert transitions."
+},
+"return_to_real": "The temporal detector is not permanently FAKE. After being in FAKE, sufficiently low smoothed evidence, with hysteresis, allows it to return to REAL. This permits a later distinct suspicious episode to produce another enteredFake event.",
+"one_alert_policy": "The alert is intended to open once per REAL -> FAKE transition, not once per detection window while the raw model remains FAKE.",
+"hysteresis": "Use a higher threshold to enter FAKE than to exit FAKE, preventing rapid state flapping.",
+"consecutive_gate": "Three qualifying raw windows reduce the chance that one isolated high model prediction immediately triggers the alert."
+},
+"conversation_dynamics": {
+"user_role": "Project developer/tester who runs commands, relays terminal output, and validates behavior.",
+"assistant_role": "Technical guide/reviewer who interprets state, protects the working tree, and proposes narrowly scoped next actions.",
+"opencode_role": "Read-only or narrowly scoped coding assistant used to inspect repository details and apply explicitly authorized changes.",
+"interaction_loop": [
+"Assistant identifies exact question or hypothesis.",
+"User runs a precise command or asks opencode to inspect.",
+"User pastes result.",
+"Assistant interprets result, distinguishes verified facts from remaining uncertainty, and gives next exact action."
+],
+"trust_expectation": "Do not claim the two-laptop setup is fully proven until it is physically tested. It is currently strongly supported by LAN reachability but not completely verified."
+},
+"implicit_understandings": [
+"The current implementation is considered a working baseline and should be preserved rather than repeatedly refactored.",
+"The temporal detector is an engineering UI/decision layer, not a replacement for model calibration.",
+"The presentation demo should prioritize reliable end-to-end behavior over architectural perfection.",
+"A known model false-positive issue should not be hidden by overly aggressive temporal tuning.",
+"WebRTC/signaling logic has already been debugged extensively and should not be disturbed casually.",
+"The local LAN test with a phone meaningfully reduces network uncertainty, but two actual WebRTC peers are still required for final confirmation.",
+"The home Wi-Fi is currently cooperative, while the venue Wi-Fi may not be.",
+"The current safety stash should remain available until the working tree is safely committed later.",
+"A clean TypeScript build is a current acceptance criterion.",
+"No lint result should be inferred because the repository has no proper lint configuration; npm run lint triggers deprecated next lint interactive setup and was not used as a validation gate."
+],
+"exact_recent_user_request_and_answer_context": {
+"request": "Create a detailed lossless JSON compression of the entire conversation that captures full context, development, dynamics, explicit and implicit understandings, current state, meta-level insights, tone/approach permissions, and unresolved elements as a standalone prompt for the next work session.",
+"required_response_shape": "One comprehensive JSON object, not prose surrounding the JSON.",
+"handoff_intent": "The next assistant/session should be able to continue directly from the physical two-laptop testing checkpoint without rediscovering prior state."
+},
+"do_not_lose": [
+"IP address: 192.168.100.86",
+"Frontend LAN URL: [http://192.168.100.86:3000](http://192.168.100.86:3000)",
+"Backend LAN URL: [http://192.168.100.86:8010](http://192.168.100.86:8010)",
+"Backend LAN startup command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8010",
+"Current frontend/backend URL derivation is already LAN-aware through window.location.hostname.",
+"Current temporal thresholds: alpha 0.4, enter 0.82, exit 0.55, raw gate >0.75 for 3 windows.",
+"Temporal tests: 9/9 passing.",
+"Frontend TypeScript: npx tsc --noEmit passing.",
+"Risk Score updates every detection_result.",
+"Alert opens only on enteredFake.",
+"FAKE can return to REAL, enabling a later re-alert.",
+"Current WebRTC local two-browser test is known good.",
+"Physical two-laptop test remains the next major priority.",
+"Do not commit/stash/reset/switch at the current stopping point unless explicitly planned.",
+"stash@{0} remains as a backup."
+]
 }

@@ -179,13 +179,6 @@ export default function DetectionPage() {
         setAnalysisStatus("ready");
         stream.getTracks().forEach((t) => t.stop());
 
-        // ── Diagnostic: log recording info and trigger download ──
-        const mimeType = mediaRecorder.mimeType || "unknown";
-        const sizeBytes = blob.size;
-        console.log("[MORPH-DIAG] Recording stopped");
-        console.log("[MORPH-DIAG] MIME:", mimeType);
-        console.log("[MORPH-DIAG] Blob size:", sizeBytes, "bytes");
-
         // Decode audio for waveform display + duration
         const ctx = new AudioContext();
         audioContextRef.current = ctx;
@@ -193,12 +186,12 @@ export default function DetectionPage() {
           ctx.decodeAudioData(buf).then((decoded) => {
             setAudioBuffer(decoded);
             setDuration(decoded.duration);
-            console.log("[MORPH-DIAG] Duration:", decoded.duration, "s");
-            console.log("[MORPH-DIAG] Sample rate:", decoded.sampleRate, "Hz");
-            console.log("[MORPH-DIAG] Channels:", decoded.numberOfChannels);
-            console.log("[MORPH-DIAG] Samples:", decoded.length);
-
-            // Auto-download the diagnostic file
+            // Diagnostic download retained for troubleshooting; single info log only
+            if (process.env.NODE_ENV === "development") {
+              console.info(
+                `[MORPH-DIAG] Recording ${decoded.duration.toFixed(2)}s ${decoded.sampleRate}Hz ${decoded.numberOfChannels}ch → morph-diag-${ts}.webm`,
+              );
+            }
             const a = document.createElement("a");
             a.href = url;
             a.download = `morph-diag-${ts}.webm`;
@@ -206,8 +199,7 @@ export default function DetectionPage() {
             a.click();
             document.body.removeChild(a);
             toast.success(`Diagnostic file saved: morph-diag-${ts}.webm`);
-          }).catch((err) => {
-            console.warn("[MORPH-DIAG] decodeAudioData failed:", err);
+          }).catch(() => {
             toast.warning("Waveform unavailable (WebM/Opus decode not supported by this browser).");
           });
         });
@@ -339,8 +331,9 @@ export default function DetectionPage() {
           formDataW,
         );
         setWindowedResult(windowed);
-      } catch (e) {
-        console.warn("Windowed analysis failed:", e);
+      } catch {
+        // Windowed is optional secondary analysis; backend may be unavailable
+        // No console warning to avoid noise during normal flow
       }
     } catch (err) {
       setAnalysisStatus("error");

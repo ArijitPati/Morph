@@ -35,6 +35,7 @@ export function RiskTimeline({ windows, threshold = 0.5 }: RiskTimelineProps) {
   const data = windows.map((w) => ({
     window: `W${w.window}`,
     idx: w.window,
+    window_index: w.window_index,
     fake_prob: Math.round(w.fake_probability * 1000) / 1000,
     fake_pct: Math.round(w.fake_probability * 1000) / 10,
     label: w.label_str,
@@ -43,22 +44,18 @@ export function RiskTimeline({ windows, threshold = 0.5 }: RiskTimelineProps) {
     is_partial: w.is_partial,
   }));
 
-  // Custom dot color based on label — must return element (not null) for Recharts type
-  // Recharts controls the dot list (Line.renderDots maps points -> dot elements).
-  // When dot is a function, Recharts calls it for each point and uses the returned
-  // element as a list child. The returned element itself must carry a stable React key
-  // (key is not auto-propagated when called as a plain function). Use the window's
-  // unique idx (w.window) as the stable key.
-  const Dot = (props: DotProps & { payload?: { label: string; idx: number }; index?: number }) => {
+  // Custom dot — stable key per window (window_index is backend-unique, never re-used within a result)
+  const Dot = (props: DotProps & { payload?: { label: string; idx: number; window_index?: number }; index?: number }) => {
     const { payload, index } = props as unknown as {
-      payload: { label: string; idx: number };
+      payload: { label: string; idx: number; window_index?: number };
       index: number;
     };
     const color = payload?.label === "FAKE" ? "#ef4444" : "#06d6a0";
-    const dotKey = payload?.idx != null ? `dot-${payload.idx}` : `dot-${index ?? ""}`;
+    // window_index is the canonical unique id; fallback to idx/index for legacy data
+    const stableIdx = payload?.window_index ?? payload?.idx ?? index ?? 0;
     return (
       <circle
-        key={dotKey}
+        key={`dot-${stableIdx}-${props.cx}-${props.cy}`}
         cx={props.cx}
         cy={props.cy}
         r={4}
@@ -127,11 +124,11 @@ export function RiskTimeline({ windows, threshold = 0.5 }: RiskTimelineProps) {
         </ResponsiveContainer>
       </div>
 
-      {/* Window chips */}
+      {/* Window chips — window_index is stable unique id */}
       <div className="flex flex-wrap gap-1.5">
         {windows.map((w) => (
           <div
-            key={w.window}
+            key={`chip-${w.window_index}-${w.start_sec}`}
             className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium ${
               w.label_str === "FAKE"
                 ? "border-danger/30 bg-danger/10 text-danger"
