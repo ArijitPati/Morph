@@ -9,14 +9,14 @@ From the project root (`morph/`):
 ```bash
 # Ensure ai_engine is importable (run from morph/)
 cd morph/
-venv_new/bin/python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
+venv/bin/python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
 ```
 
 Or from `backend/`:
 
 ```bash
 cd backend/
-PYTHONPATH=.. ../venv_new/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+PYTHONPATH=.. ../venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 The server loads the Morph V2 XGBoost model once at startup.
@@ -72,3 +72,44 @@ curl -X POST http://localhost:8000/api/detection/analyze \
 | 400  | Invalid format or empty file |
 | 413  | File too large (>50 MB) |
 | 500  | Detection pipeline error |
+
+### WS /api/detection/ws
+
+Live streaming detection (see `frontend/src/types/websocket.ts`). One
+connection = one call stream. The client streams mono **float32 PCM**
+chunks and receives a `detection_result` per completed 4 s window
+(1 s hop → roughly one prediction/second).
+
+**Client → server:**
+
+```json
+{
+  "type": "audio_chunk",
+  "payload": {
+    "data": "<base64-encoded mono float32 LE PCM>",
+    "sample_rate": 16000,
+    "timestamp": 1690000000000
+  }
+}
+```
+
+Float32 full precision is intentional: the V2 model measurably flips some
+verdicts under 16-bit quantization, so the wire format matches what
+`librosa.load` feeds the feature extractor. Capture at **16000 Hz** in the
+browser (`new AudioContext({ sampleRate: 16000 })`) so the backend needs
+no resampling — the model is sensitive to resampler differences too.
+
+**Server → client:**
+
+| type | payload |
+|------|---------|
+| `status_update` | `{"status": "connected"\|"analyzing"\|"idle"}` |
+| `detection_result` | `{"label", "label_str", "confidence", "real_probability", "fake_probability", "chunk_duration"}` |
+| `error` | `{"code": "BAD_MESSAGE"\|"BAD_CHUNK"\|"BAD_SAMPLE_RATE"\|"BAD_AUDIO"\|"DETECTION_ERROR", "message": "..."}` |
+
+## Tests
+
+```bash
+# from morph/
+venv/bin/python -m pytest ai_engine/tests backend/tests -q
+```

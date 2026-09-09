@@ -24,12 +24,13 @@ export function useDetectionSocket({
   onDetection,
   onError,
 }: UseDetectionSocketOptions): UseDetectionSocketReturn {
-  const [isConnected, setIsConnected] = useState(false);
+const [isConnected, setIsConnected] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [lastResult, setLastResult] =
     useState<DetectionResultMessage["payload"] | null>(null);
 
   const wsRef = useRef<MorphWebSocket | null>(null);
+  const isConnectedRef = useRef(false);
 
   const handleMessage = useCallback(
     (message: WSMessage) => {
@@ -63,6 +64,7 @@ export function useDetectionSocket({
     const ws = new MorphWebSocket({ url });
     ws.onMessage(handleMessage);
     ws.onStatusChange((status) => {
+      isConnectedRef.current = status === "connected";
       setIsConnected(status === "connected");
     });
     ws.connect();
@@ -72,13 +74,14 @@ export function useDetectionSocket({
   const disconnect = useCallback(() => {
     wsRef.current?.disconnect();
     wsRef.current = null;
+    isConnectedRef.current = false;
     setIsConnected(false);
     setIsAnalyzing(false);
   }, []);
 
   const sendAudioChunk = useCallback(
     (chunk: ArrayBuffer, sampleRate: number) => {
-      if (!wsRef.current || !isConnected) return;
+      if (!wsRef.current || !isConnectedRef.current) return;
 
       setIsAnalyzing(true);
 
@@ -99,7 +102,7 @@ export function useDetectionSocket({
         },
       });
     },
-    [isConnected],
+    [],
   );
 
   useEffect(() => {
