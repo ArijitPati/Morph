@@ -5,18 +5,23 @@ import type { WSMessage, WebSocketConfig } from "@/types/websocket";
  *
  * Priority: explicit NEXT_PUBLIC_API_URL env var, otherwise derive from the
  * page host — opening the app via a LAN IP automatically targets the backend
- * on that same host (port 8010). Falls back to localhost for local dev.
+ * on that same host (port 8000). Falls back to localhost for local dev.
+ * Respects https/wss when the page is served over HTTPS (required for
+ * LAN phone access so getUserMedia is available and mixed-content is avoided).
  */
 export function getApiBaseUrl(): string {
   const envBase = process.env.NEXT_PUBLIC_API_URL;
   if (envBase) return envBase.replace(/\/$/, "");
+  const isHttps =
+    typeof window !== "undefined" && window.location.protocol === "https:";
+  const scheme = isHttps ? "https://" : "http://";
   if (typeof window !== "undefined" && window.location?.hostname) {
     const host = window.location.hostname;
     if (host !== "localhost" && host !== "127.0.0.1" && host !== "[::1]") {
-      return `http://${host}:8010`;
+      return `${scheme}${host}:8000`;
     }
   }
-  return "http://localhost:8010";
+  return `${scheme}localhost:8000`;
 }
 
 /** WebSocket URL for the live detection stream (mirrors /api/detection/ws). */

@@ -27,6 +27,7 @@ import {
 } from "@/services/signaling";
 import type { SignalingIncoming } from "@/types/signaling";
 import type { DetectionResultMessage } from "@/types/websocket";
+import type { WindowResult, AggregationResult } from "@/types/detection";
 import { toast } from "sonner";
 
 type CallStatus =
@@ -299,6 +300,44 @@ function MonitoringPanel({ status, windows, aggregation, isStreaming, result, is
   );
 }
 
+// ─── Room-call aggregation helper (mirrors ai_engine/inference/aggregation.py) ─
+function computeRoomAggregation(windows: WindowResult[]): AggregationResult | null {
+  if (!windows.length) return null;
+  const probs = windows.map((w) => w.fake_probability);
+  const n = probs.length;
+  const n_fake = probs.filter((p) => p >= 0.5).length;
+  const n_real = n - n_fake;
+  const mean = probs.reduce((a, b) => a + b, 0) / n;
+  const sorted = [...probs].sort((a, b) => a - b);
+  const median = n % 2 === 1 ? sorted[Math.floor(n / 2)] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
+  const max = Math.max(...probs);
+  const min = Math.min(...probs);
+  const std = n > 1 ? Math.sqrt(probs.reduce((s, p) => s + (p - mean) ** 2, 0) / n) : 0;
+  const final_fake = mean;
+  const final_real = 1 - final_fake;
+  const label = final_fake >= 0.5 ? 1 : 0;
+  const risk_level = final_fake >= 0.65 ? "HIGH" : final_fake >= 0.35 ? "MEDIUM" : "LOW";
+  return {
+    total_windows: n,
+    n_fake,
+    n_real,
+    pct_fake: Math.round((n_fake / n) * 10000) / 100,
+    pct_real: Math.round((n_real / n) * 10000) / 100,
+    mean_fake_prob: Math.round(mean * 1e6) / 1e6,
+    median_fake_prob: Math.round(median * 1e6) / 1e6,
+    max_fake_prob: Math.round(max * 1e6) / 1e6,
+    min_fake_prob: Math.round(min * 1e6) / 1e6,
+    std_fake_prob: Math.round(std * 1e6) / 1e6,
+    final_fake_prob: Math.round(final_fake * 1e6) / 1e6,
+    final_real_prob: Math.round(final_real * 1e6) / 1e6,
+    aggregated_label: label,
+    aggregated_label_str: label === 1 ? "FAKE" : "REAL",
+    risk_level: risk_level as AggregationResult["risk_level"],
+    risk_score: Math.round(final_fake * 10000) / 100,
+    confidence: Math.round(Math.abs(final_fake - 0.5) * 2 * 10000) / 10000,
+  };
+}
+
 // ─── Main Page ─────────────────────────────────────────────────
 
 export default function CallPage() {
@@ -308,6 +347,25 @@ export default function CallPage() {
   const [riskScore, setRiskScore] = useState<number | null>(null);
   const [lastResult, setLastResult] =
     useState<DetectionResultMessage["payload"] | null>(null);
+
+  // ── Room-call live graph (reuses RiskTimeline) ─────────────────
+  const [roomWindows, setRoomWindows] = useState<WindowResult[]>([]);
+  const [roomAggregation, setRoomAggregation] = useState<AggregationResult | null>(null);
+  const [morphTerminated, setMorphTerminated] = useState(false);
+  const [terminationReason, setTerminationReason] = useState<string | null>(null);
+  // Progressive thresholds: 70→75→80→85→90(hard stop). Set ensures each fires once per call.
+  const triggeredThresholdsRef = useRef<Set<number>>(new Set());
+  const hasRemoteAudioRefStable = useRef(false);
+  const callStatusRef = useRef<CallStatus>("idle");
+  const roomWindowsRef = useRef<WindowResult[]>([]);
+  const morphTerminatedRef = useRef(false);
+  // Keep refs in sync with state for synchronous handleDetection access
+  useEffect(() => {
+    roomWindowsRef.current = roomWindows;
+  }, [roomWindows]);
+  useEffect(() => {
+    morphTerminatedRef.current = morphTerminated;
+  }, [morphTerminated]);
 
   // ── Two-browser signaling state ──────────────────────────────
   const [roomInput, setRoomInput] = useState("");
@@ -332,14 +390,87 @@ export default function CallPage() {
     setDetectionUrl(getDetectionSocketUrl());
   }, []);
 
+  useEffect(() => {
+    callStatusRef.current = callStatus;
+  }, [callStatus]);
+
   const handleDetection = useCallback(
     (result: DetectionResultMessage["payload"]) => {
       setLastResult(result);
-      // Risk Score tracks every raw window (pre-smoothing behavior).
-      setRiskScore(Math.round(result.fake_probability * 100));
-      // Temporal decision layer (EWMA + hysteresis + consecutive-window
-      // gate) controls ONLY whether the alert opens: exactly once per
-      // REAL → FAKE transition, never once per FAKE window.
+      const risk = Math.round(result.fake_probability * 100);
+      setRiskScore(risk);
+
+      // Determine if this is a connected Room Call (must be remote peer, not host mic)
+      const isRoomCall = !!roomRef.current && hasRemoteAudioRefStable.current;
+
+      if (isRoomCall) {
+        // ── Build Room-call WindowResult for RiskTimeline (reuse existing component) ──
+        // Convert lightweight detection_result into full WindowResult shape.
+        // Once remote is connected, host mic is already detached in useWebRTC (attachDetectionStream remote),
+        // so results here are exclusively remote peer audio.
+        const wIdx = roomWindowsRef.current.length;
+        const hop = 1.0;
+        const winSec = 4.0;
+        const start = wIdx * hop;
+        const win: WindowResult = {
+          window_index: wIdx,
+          window: wIdx + 1,
+          start_sec: start,
+          end_sec: start + winSec,
+          duration: (result as unknown as { chunk_duration?: number }).chunk_duration ?? winSec,
+          chunk_duration: (result as unknown as { chunk_duration?: number }).chunk_duration ?? winSec,
+          is_partial: (result as unknown as { is_partial?: boolean }).is_partial ?? false,
+          label: (result as unknown as { label?: number }).label ?? (result.label_str === "FAKE" ? 1 : 0),
+          label_str: result.label_str,
+          confidence: result.confidence,
+          real_probability: result.real_probability,
+          fake_probability: result.fake_probability,
+          real_prob: (result as unknown as { real_prob?: number }).real_prob ?? result.real_probability,
+          fake_prob: (result as unknown as { fake_prob?: number }).fake_prob ?? result.fake_probability,
+          model_version: (result as unknown as { model_version?: string }).model_version ?? "w2v2_aasist",
+        };
+        const nextWindows = [...roomWindowsRef.current, win];
+        roomWindowsRef.current = nextWindows;
+        setRoomWindows(nextWindows);
+        const agg = computeRoomAggregation(nextWindows);
+        setRoomAggregation(agg);
+
+        // ── Progressive thresholds: 70→75→80→85→90 (hard stop) ──
+        // Each threshold fires at most once per call. Jump 68→82 triggers 70,75,80.
+        // 90 terminates immediately.
+        if (risk >= 90 && !triggeredThresholdsRef.current.has(90)) {
+          triggeredThresholdsRef.current.add(90);
+          setAlertScore(90);
+          toast.error(`🛑 Morph terminated call — Risk ${risk}% reached critical 90%`, { duration: 8000 });
+          morphTerminatedRef.current = true;
+          setMorphTerminated(true);
+          setTerminationReason(`Morph ended the call — risk reached critical ${risk}% (90% threshold)`);
+          setAlertOpen(false);
+          // Immediate termination — close PC, tracks, processor, websockets
+          // Use a microtask to avoid setState-in-render conflicts
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent("morph-terminate-90"));
+          }, 0);
+          return;
+        }
+        for (const th of [70, 75, 80, 85]) {
+          if (risk >= th && !triggeredThresholdsRef.current.has(th)) {
+            triggeredThresholdsRef.current.add(th);
+            if (th === 70) {
+              toast.warning(`⚠️ Suspicious activity detected — Risk ${risk}% (threshold ${th}%)`, { duration: 5000 });
+              setAlertScore(risk);
+              setAlertOpen(true);
+            } else {
+              toast.warning(`⚠️ Risk increased — ${risk}% (threshold ${th}%)`, { duration: 5000 });
+              setAlertScore(risk);
+              setAlertOpen(true);
+            }
+          }
+        }
+        return;
+      }
+
+      // Non-room path (direct live or pre-remote fallback): preserve existing temporal behavior
       const decision = temporal.process(result.fake_probability);
       if (decision.enteredFake) {
         setAlertOpen(true);
@@ -406,6 +537,11 @@ export default function CallPage() {
   useEffect(() => {
     if (isConnected) setCallStatus("connected");
   }, [isConnected]);
+
+  // Keep hasRemoteAudio ref in sync for stable handleDetection closure (must be after useWebRTC)
+  useEffect(() => {
+    hasRemoteAudioRefStable.current = hasRemoteAudio;
+  }, [hasRemoteAudio]);
 
   // Latest RTC methods for the signaling callback (avoids stale closures).
   const rtcRef = useRef({
@@ -496,6 +632,16 @@ export default function CallPage() {
       }
       try {
         setCallStatus("requesting");
+        // Reset Room-call graph and progressive thresholds for new call
+        setRoomWindows([]);
+        setRoomAggregation(null);
+        roomWindowsRef.current = [];
+        triggeredThresholdsRef.current.clear();
+        morphTerminatedRef.current = false;
+        setMorphTerminated(false);
+        setTerminationReason(null);
+        setAlertOpen(false);
+        setAlertScore(null);
         await rtcRef.current.start();
         setCallStatus("connecting");
         detection.connect();
@@ -561,6 +707,8 @@ export default function CallPage() {
   }, [start, live, detection]);
 
   const handleEndCall = useCallback(() => {
+    const wasMorphTerminated = morphTerminatedRef.current;
+    const reason = terminationReason;
     if (roomRef.current) {
       signalingRef.current?.send({
         type: "leave",
@@ -573,6 +721,16 @@ export default function CallPage() {
     live.stopStreaming();
     stop();
     temporal.reset();
+    // Reset Room-call graph (preserve termination UI until next call)
+    setRoomWindows([]);
+    setRoomAggregation(null);
+    roomWindowsRef.current = [];
+    if (!wasMorphTerminated) {
+      triggeredThresholdsRef.current.clear();
+      setTerminationReason(null);
+      setMorphTerminated(false);
+      morphTerminatedRef.current = false;
+    }
     setLastResult(null);
     setRiskScore(null);
     setRoomCode(null);
@@ -585,8 +743,20 @@ export default function CallPage() {
     setCallStatus("ended");
     setAlertOpen(false);
     setAlertScore(null);
-    toast.info("Call ended.");
-  }, [stop, detection, live, temporal]);
+    if (wasMorphTerminated && reason) {
+      // Already toasted in handleDetection; keep ended state visible
+      toast.error(reason, { duration: 8000 });
+    } else {
+      toast.info("Call ended.");
+    }
+  }, [stop, detection, live, temporal, terminationReason]);
+
+  // Hard-stop at 90%: handleDetection dispatches this event, we then perform full teardown
+  useEffect(() => {
+    const onMorphTerminate = () => handleEndCall();
+    window.addEventListener("morph-terminate-90", onMorphTerminate as EventListener);
+    return () => window.removeEventListener("morph-terminate-90", onMorphTerminate as EventListener);
+  }, [handleEndCall]);
 
   const handleToggleMute = useCallback(() => {
     toggleMute();
@@ -730,7 +900,7 @@ export default function CallPage() {
                       {signalingStatus === "disconnected" && roomCode && (
                         <span className="ml-1">
                           — backend unreachable. Check the host/IP and port
-                          8010, then re-join.
+                          8000, then re-join.
                         </span>
                       )}
                     </p>
@@ -787,30 +957,42 @@ export default function CallPage() {
               </motion.div>
             </div>
 
-            {/* Right: Monitoring panel */}
+            {/* Right: Monitoring panel — Room Call reuses same RiskTimeline graph, fed by remote peer */}
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.2 }}
             >
+              {morphTerminated && terminationReason && (
+                <div className="mb-3 rounded-lg border border-danger/30 bg-danger/10 px-4 py-3">
+                  <p className="text-xs font-semibold text-danger">🛑 {terminationReason}</p>
+                  <p className="mt-1 text-[11px] text-danger/80">Morph automatically ended the WebRTC call and closed audio/detection resources.</p>
+                </div>
+              )}
               <MonitoringPanel
-                status={callStatus}
-                windows={live.windows}
-                aggregation={live.aggregation}
-                isStreaming={live.isStreaming}
+                status={morphTerminated ? "ended" : callStatus}
+                windows={roomCode ? roomWindows : live.windows}
+                aggregation={roomCode ? roomAggregation : live.aggregation}
+                isStreaming={roomCode ? hasRemoteAudio : live.isStreaming}
                 result={lastResult}
                 isAnalyzing={detection.isAnalyzing}
               />
+              {roomCode && hasRemoteAudio && (
+                <p className="mt-2 text-[11px] text-muted-foreground/60">Graph tracks remote peer audio only (host mic detached after WebRTC connected).</p>
+              )}
+              {!roomCode && live.windows.length > 0 && (
+                <p className="mt-2 text-[11px] text-muted-foreground/60">Direct live graph (local mic) — Room Call graph above reuses same RiskTimeline component.</p>
+              )}
             </motion.div>
           </div>
         </div>
       </PageContainer>
       <Footer />
 
-      {/* Alert Modal — combined: fires on either temporal transition or high aggregated risk */}
+      {/* Alert Modal — combined: fires on temporal, live aggregation, or Room progressive thresholds */}
       <AlertModal
         open={alertOpen}
-        riskScore={alertScore ?? riskScore ?? live.aggregation?.risk_score ?? null}
+        riskScore={alertScore ?? riskScore ?? roomAggregation?.risk_score ?? live.aggregation?.risk_score ?? null}
         onEndCall={handleEndCall}
         onContinue={() => setAlertOpen(false)}
       />

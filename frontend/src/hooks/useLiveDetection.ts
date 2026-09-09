@@ -2,9 +2,19 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WindowResult, AggregationResult } from "@/types/detection";
+import { getApiBaseUrl } from "@/services/websocket";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8010";
-const WS_BASE = API_BASE.replace(/^http/, "ws");
+function getWsBase(): string {
+  // Prefer centralized getApiBaseUrl (handles https→wss and LAN IP)
+  // Fallback for SSR where window is undefined.
+  try {
+    return getApiBaseUrl().replace(/^http/, "ws");
+  } catch {
+    const envBase = process.env.NEXT_PUBLIC_API_URL;
+    if (envBase) return envBase.replace(/^http/, "ws");
+    return "ws://localhost:8000";
+  }
+}
 
 export interface UseLiveDetectionOptions {
   windowSec?: number;
@@ -66,7 +76,8 @@ export function useLiveDetection(options: UseLiveDetectionOptions = {}): UseLive
   const connectWs = useCallback((): Promise<WebSocket> => {
     return new Promise((resolve, reject) => {
       const hop = hopSec ?? windowSec;
-      const url = `${WS_BASE}/ws/detect?window_sec=${windowSec}&hop_sec=${hop}&aggregation=${aggregation}`;
+      const wsBase = getWsBase();
+      const url = `${wsBase}/ws/detect?window_sec=${windowSec}&hop_sec=${hop}&aggregation=${aggregation}`;
       const ws = new WebSocket(url);
 
       ws.onopen = () => {

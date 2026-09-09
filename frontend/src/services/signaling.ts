@@ -76,7 +76,7 @@ export class SignalingSocket {
         // down, hotspot client isolation). Surface visibly — and keep the
         // queue so a retry flushes it.
         this.errorHandler?.(
-          `Signaling unreachable at ${this.url} — is the backend running on port 8010 and reachable from this host?`,
+          `Signaling unreachable at ${this.url} — is the backend running on port 8000 and reachable from this host?`,
         );
       }
       this.statusHandler?.("disconnected");
