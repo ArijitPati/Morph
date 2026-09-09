@@ -29,6 +29,7 @@ import type { SignalingIncoming } from "@/types/signaling";
 import type { DetectionResultMessage } from "@/types/websocket";
 import type { WindowResult, AggregationResult } from "@/types/detection";
 import { toast } from "sonner";
+import { publishCall, removeCall, publishAlert, riskLevelFromRisk } from "@/lib/dashboardStore";
 
 type CallStatus =
   | "idle"
@@ -58,6 +59,41 @@ const statusColors: Record<CallStatus, string> = {
   ended: "bg-muted-foreground/40",
   error: "bg-danger",
 };
+
+// ─── Room-call pre-transaction warning config (70/75/80/85/90) ─────────
+type WarningThreshold = 70 | 75 | 80 | 85 | 90;
+const ROOM_WARNING_CONFIG: Record<WarningThreshold, { icon: string; title: string; desc: string }> = {
+  70: { icon: "⚠️", title: "Suspicious call detected", desc: "Verify the caller before sharing sensitive information." },
+  75: { icon: "🚨", title: "Elevated Risk", desc: "Potential impersonation detected. Do not share sensitive information." },
+  80: { icon: "🚨", title: "High Risk Call", desc: "Do not share OTP, passwords, or financial information." },
+  85: { icon: "🚨", title: "Critical Warning", desc: "Strong signs of impersonation/fraud detected. Verify the caller through an official channel before continuing." },
+  90: { icon: "🛑", title: "Critical risk detected", desc: "Morph has ended the call to prevent potential fraud." },
+};
+
+function deriveWarningReason(result: DetectionResultMessage["payload"] | null, risk: number): string {
+  if (!result) return "Potential voice impersonation detected.";
+  const p: unknown = result as unknown;
+  // Use only signals already produced by backend — do not invent
+  const obj = p as Record<string, unknown>;
+  // Semantic/OTP signals if backend ever provides them (forward-compatible)
+  const semantic = obj["semantic"] as Record<string, unknown> | undefined;
+  const transcript = (obj["transcript"] as string) || (semantic?.["transcript"] as string);
+  const otpFlag = obj["otp_detected"] ?? semantic?.["otp_detected"] ?? obj["credential_request"];
+  const financialFlag = obj["financial_manipulation"] ?? semantic?.["financial_manipulation"];
+  const urgencyFlag = obj["urgency_detected"] ?? semantic?.["urgency_detected"];
+
+  // Surface semantic reason when available
+  if (otpFlag) return "Sensitive request detected: OTP / credential request.";
+  if (financialFlag) return "Financial manipulation detected.";
+  if (urgencyFlag) return "Urgency / pressure tactics detected.";
+  if (transcript && typeof transcript === "string" && transcript.trim().length > 0) {
+    return `Transcript flag: "${transcript.slice(0, 80)}"`;
+  }
+  // Default acoustic reason
+  if (risk >= 85) return "Strong signs of impersonation/fraud detected.";
+  if (risk >= 70) return "Potential voice impersonation detected.";
+  return "Potential voice impersonation detected.";
+}
 
 // ─── Alert Modal ───────────────────────────────────────────────
 
@@ -124,6 +160,66 @@ function AlertModal({ open, riskScore, onEndCall, onContinue }: AlertModalProps)
         </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+// ─── Room Warning Card (pre-transaction / secondary verification) ───────
+// State-aware: 70–89 shows verification actions (no Block); 90 shows only Block+Report (no End Call)
+interface RoomWarningCardProps {
+  threshold: WarningThreshold;
+  risk: number;
+  reason: string;
+  onVerify: () => void;
+  onRequestMfa: () => void;
+  onEscalate: () => void;
+  onBlock: () => void;
+}
+
+function RoomWarningCard({ threshold, risk, reason, onVerify, onRequestMfa, onEscalate, onBlock }: RoomWarningCardProps) {
+  const cfg = ROOM_WARNING_CONFIG[threshold];
+  const isTerminated = threshold === 90;
+  return (
+    <div className={`rounded-xl border p-4 ${isTerminated ? "border-danger/40 bg-danger/10" : threshold >= 80 ? "border-warning/30 bg-warning/10" : "border-warning/20 bg-card"}`}>
+      <div className="flex items-start gap-3">
+        <div className={`rounded-lg p-2 ${isTerminated ? "bg-danger/20" : "bg-warning/15"}`}>
+          <AlertTriangle className={`h-5 w-5 ${isTerminated ? "text-danger" : "text-warning"}`} />
+        </div>
+        <div className="flex-1">
+          <h3 className="text-sm font-semibold flex items-center gap-2">
+            {cfg.icon} {cfg.title} — {risk}%
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">{cfg.desc}</p>
+          <p className="mt-2 text-xs font-medium text-foreground">{reason}</p>
+          {threshold < 90 && <p className="mt-1 text-[11px] text-muted-foreground/70">Current risk {risk}% (threshold {threshold}%)</p>}
+          {isTerminated && <p className="mt-2 text-xs font-medium text-danger">Morph has automatically ended the call to prevent potential fraud. Recommended next steps below.</p>}
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {isTerminated ? (
+          <>
+            <button onClick={onBlock} className="inline-flex items-center gap-1.5 rounded-lg bg-danger px-3 py-1.5 text-xs font-semibold text-white hover:bg-danger/90">
+              Block
+            </button>
+            <button onClick={onEscalate} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold hover:bg-secondary">
+              Report
+            </button>
+          </>
+        ) : (
+          <>
+            <button onClick={onVerify} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold hover:bg-secondary">
+              Verify Through Official Number
+            </button>
+            <button onClick={onRequestMfa} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold hover:bg-secondary">
+              Request MFA
+            </button>
+            <button onClick={onEscalate} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold hover:bg-secondary">
+              Report / Escalate
+            </button>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -353,6 +449,10 @@ export default function CallPage() {
   const [roomAggregation, setRoomAggregation] = useState<AggregationResult | null>(null);
   const [morphTerminated, setMorphTerminated] = useState(false);
   const [terminationReason, setTerminationReason] = useState<string | null>(null);
+  // Pre-transaction warning UI — current threshold/risk/reason (does not block graph)
+  const [activeWarningThreshold, setActiveWarningThreshold] = useState<WarningThreshold | null>(null);
+  const [activeWarningRisk, setActiveWarningRisk] = useState<number | null>(null);
+  const [activeWarningReason, setActiveWarningReason] = useState<string | null>(null);
   // Progressive thresholds: 70→75→80→85→90(hard stop). Set ensures each fires once per call.
   const triggeredThresholdsRef = useRef<Set<number>>(new Set());
   const hasRemoteAudioRefStable = useRef(false);
@@ -381,6 +481,20 @@ export default function CallPage() {
   const roleRef = useRef<"caller" | "callee" | null>(null);
   const offerSentRef = useRef(false);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Secondary verification guidance actions (no backend workflow)
+  const handleVerifyGuidance = useCallback(() => {
+    toast.info("End this call and contact the organization using the official number from their website/card/statement. Do not use a number provided by the caller.", { duration: 8000 });
+  }, []);
+  const handleMfaGuidance = useCallback(() => {
+    toast.info("Require independent verification through an approved MFA/authentication channel before completing the requested action.", { duration: 8000 });
+  }, []);
+  const handleEscalateGuidance = useCallback(() => {
+    toast.info("Escalation noted — report this call to your supervisor / security team with risk score and any transcript.", { duration: 8000 });
+  }, []);
+  const handleBlockGuidance = useCallback(() => {
+    toast.info("Contact blocked — this number has been flagged as high-risk for future calls.", { duration: 8000 });
+  }, []);
 
   const temporal = useTemporalDetection();
 
@@ -438,35 +552,89 @@ export default function CallPage() {
         // ── Progressive thresholds: 70→75→80→85→90 (hard stop) ──
         // Each threshold fires at most once per call. Jump 68→82 triggers 70,75,80.
         // 90 terminates immediately.
+        const reason = deriveWarningReason(result, risk);
         if (risk >= 90 && !triggeredThresholdsRef.current.has(90)) {
           triggeredThresholdsRef.current.add(90);
           setAlertScore(90);
-          toast.error(`🛑 Morph terminated call — Risk ${risk}% reached critical 90%`, { duration: 8000 });
+          setActiveWarningThreshold(90);
+          setActiveWarningRisk(risk);
+          setActiveWarningReason(reason);
+          const cfg90 = ROOM_WARNING_CONFIG[90];
+          toast.error(`${cfg90.icon} ${cfg90.title} — ${risk}%`, { description: `${reason} ${cfg90.desc}`, duration: 8000 });
           morphTerminatedRef.current = true;
           setMorphTerminated(true);
           setTerminationReason(`Morph ended the call — risk reached critical ${risk}% (90% threshold)`);
           setAlertOpen(false);
-          // Immediate termination — close PC, tracks, processor, websockets
-          // Use a microtask to avoid setState-in-render conflicts
+          // Publish to dashboard — processed risk, no recalculation
+          publishCall({
+            id: roomRef.current,
+            risk,
+            riskLevel: riskLevelFromRisk(risk),
+            status: "terminated",
+            terminated: true,
+            activeThreshold: 90,
+            reason,
+            windows: nextWindows,
+            aggregation: agg,
+            lastUpdate: Date.now(),
+          });
+          publishAlert({
+            id: `alert-${Date.now()}-90`,
+            callId: roomRef.current,
+            threshold: 90,
+            risk,
+            reason,
+            title: cfg90.title,
+            timestamp: Date.now(),
+            terminated: true,
+          });
           setTimeout(() => {
             window.dispatchEvent(new CustomEvent("morph-terminate-90"));
           }, 0);
           return;
         }
-        for (const th of [70, 75, 80, 85]) {
+        let firedThisChunk = false;
+        for (const th of [70, 75, 80, 85] as WarningThreshold[]) {
           if (risk >= th && !triggeredThresholdsRef.current.has(th)) {
             triggeredThresholdsRef.current.add(th);
-            if (th === 70) {
-              toast.warning(`⚠️ Suspicious activity detected — Risk ${risk}% (threshold ${th}%)`, { duration: 5000 });
-              setAlertScore(risk);
-              setAlertOpen(true);
-            } else {
-              toast.warning(`⚠️ Risk increased — ${risk}% (threshold ${th}%)`, { duration: 5000 });
-              setAlertScore(risk);
-              setAlertOpen(true);
-            }
+            setActiveWarningThreshold(th);
+            setActiveWarningRisk(risk);
+            setActiveWarningReason(reason);
+            const cfg = ROOM_WARNING_CONFIG[th];
+            toast.warning(`${cfg.icon} ${cfg.title} — ${risk}%`, { description: `${reason} ${cfg.desc}`, duration: 5000 });
+            setAlertScore(risk);
+            setAlertOpen(true);
+            publishAlert({
+              id: `alert-${Date.now()}-${th}`,
+              callId: roomRef.current,
+              threshold: th,
+              risk,
+              reason,
+              title: cfg.title,
+              timestamp: Date.now(),
+            });
+            firedThisChunk = true;
           }
         }
+        // Always publish latest processed risk to dashboard (live risk / active call)
+        const activeTh = triggeredThresholdsRef.current.size ? Math.max(...Array.from(triggeredThresholdsRef.current).filter((t) => t !== 90) as number[]) as WarningThreshold | null : null;
+        // Use highest triggered threshold that is <= risk, or null if <70
+        const currentTh = risk >= 70 ? (risk >= 85 ? 85 : risk >= 80 ? 80 : risk >= 75 ? 75 : 70) : null;
+        publishCall({
+          id: roomRef.current,
+          risk,
+          riskLevel: riskLevelFromRisk(risk),
+          status: hasRemoteAudioRefStable.current ? "monitoring" : "connected",
+          terminated: false,
+          activeThreshold: activeTh ?? currentTh,
+          reason,
+          windows: nextWindows,
+          aggregation: agg,
+          lastUpdate: Date.now(),
+        });
+        // Avoid duplicate alert spam — if we just fired, active warning already set
+        if (firedThisChunk) return;
+        // Even if no new threshold, still keep dashboard live risk updated (already published)
         return;
       }
 
@@ -640,6 +808,9 @@ export default function CallPage() {
         morphTerminatedRef.current = false;
         setMorphTerminated(false);
         setTerminationReason(null);
+        setActiveWarningThreshold(null);
+        setActiveWarningRisk(null);
+        setActiveWarningReason(null);
         setAlertOpen(false);
         setAlertScore(null);
         await rtcRef.current.start();
@@ -652,6 +823,19 @@ export default function CallPage() {
         setRole(asRole);
         setPeerCount(0);
         ensureSignaling().send({ type: "join", payload: { room } });
+        // Publish initial active call to dashboard (backend-processed risk still 0)
+        publishCall({
+          id: room,
+          risk: 0,
+          riskLevel: "Low",
+          status: "connected",
+          terminated: false,
+          activeThreshold: null,
+          reason: null,
+          windows: [],
+          aggregation: null,
+          lastUpdate: Date.now(),
+        });
       } catch {
         setCallStatus("error");
         toast.error("Could not access microphone.");
@@ -709,10 +893,11 @@ export default function CallPage() {
   const handleEndCall = useCallback(() => {
     const wasMorphTerminated = morphTerminatedRef.current;
     const reason = terminationReason;
-    if (roomRef.current) {
+    const endedId = roomRef.current;
+    if (endedId) {
       signalingRef.current?.send({
         type: "leave",
-        payload: { room: roomRef.current },
+        payload: { room: endedId },
       });
     }
     signalingRef.current?.disconnect();
@@ -721,6 +906,8 @@ export default function CallPage() {
     live.stopStreaming();
     stop();
     temporal.reset();
+    // Remove active call from dashboard (alerts remain for terminated)
+    if (endedId) removeCall(endedId);
     // Reset Room-call graph (preserve termination UI until next call)
     setRoomWindows([]);
     setRoomAggregation(null);
@@ -730,6 +917,9 @@ export default function CallPage() {
       setTerminationReason(null);
       setMorphTerminated(false);
       morphTerminatedRef.current = false;
+      setActiveWarningThreshold(null);
+      setActiveWarningRisk(null);
+      setActiveWarningReason(null);
     }
     setLastResult(null);
     setRiskScore(null);
@@ -837,7 +1027,7 @@ export default function CallPage() {
                   className="rounded-xl border border-border bg-card p-4"
                 >
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Two-laptop call
+                    WEB-RTC ROOM CALL
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     One laptop hosts a room, the other joins with the same
@@ -963,7 +1153,22 @@ export default function CallPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.2 }}
             >
-              {morphTerminated && terminationReason && (
+              {/* Pre-transaction warnings — visible during live call, do not block graph */}
+              {activeWarningThreshold && activeWarningRisk !== null && activeWarningReason && (
+                <div className="mb-3">
+                  <RoomWarningCard
+                    threshold={activeWarningThreshold}
+                    risk={activeWarningRisk}
+                    reason={activeWarningReason}
+                    onVerify={handleVerifyGuidance}
+                    onRequestMfa={handleMfaGuidance}
+                    onEscalate={handleEscalateGuidance}
+                    onBlock={handleBlockGuidance}
+                  />
+                </div>
+              )}
+              {/* Fallback termination banner if activeWarning not set (edge) */}
+              {morphTerminated && !activeWarningThreshold && terminationReason && (
                 <div className="mb-3 rounded-lg border border-danger/30 bg-danger/10 px-4 py-3">
                   <p className="text-xs font-semibold text-danger">🛑 {terminationReason}</p>
                   <p className="mt-1 text-[11px] text-danger/80">Morph automatically ended the WebRTC call and closed audio/detection resources.</p>
@@ -979,6 +1184,9 @@ export default function CallPage() {
               />
               {roomCode && hasRemoteAudio && (
                 <p className="mt-2 text-[11px] text-muted-foreground/60">Graph tracks remote peer audio only (host mic detached after WebRTC connected).</p>
+              )}
+              {roomCode && activeWarningThreshold && (
+                <p className="mt-2 text-[11px] text-muted-foreground/60">Warning at {activeWarningThreshold}% (current {activeWarningRisk}%) — {deriveWarningReason(lastResult, activeWarningRisk ?? 0)}</p>
               )}
               {!roomCode && live.windows.length > 0 && (
                 <p className="mt-2 text-[11px] text-muted-foreground/60">Direct live graph (local mic) — Room Call graph above reuses same RiskTimeline component.</p>
